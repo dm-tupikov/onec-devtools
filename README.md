@@ -1,170 +1,170 @@
-# 1C DevTools MCP Server
+# MCP:1C-DevTools — сервер для разработки 1С
 
-**74 tools for 1C:Enterprise development** — static analysis, code auditing, query validation, EPF verification, and more.
+**74 инструмента для разработки в 1С:Предприятие** — статический анализ, аудит кода, проверка запросов, верификация EPF и многое другое.
 
-Works with local 1C XML config dumps — **no running 1C instance required**.
+Работает с локальными XML-выгрузками конфигурации 1С — **не требует запущенной базы 1С**.
 
-## Quick Start
+## Быстрый старт
 
 ### Docker
 
 ```bash
-# Clone and setup
+# Клонируем и готовим данные
 mkdir -p config-dump
-# Copy your 1C config XML dump to config-dump/
+# Копируем XML-выгрузку 1С в config-dump/
 
-# Build and run
+# Собираем и запускаем
 docker build -t onec-devtools .
 docker run --rm -it \
   -v $(pwd)/config-dump:/data/config:ro \
   -v $(pwd)/src/cf:/data/src:ro \
   onec-devtools
 
-# Or with docker-compose
+# Или через docker-compose
 docker-compose up --build
 ```
 
-### Local
+### Локально
 
 ```bash
 pip install -r requirements.txt
 python -m mcp_devtools --config-path ./config-dump
 ```
 
-## Available Tools (74)
+## Доступные инструменты (74)
 
-### A: Metadata (10)
-| Tool | Description |
-|------|-------------|
-| `meta.tree` | Metadata tree by type |
-| `meta.structure` | Full object structure |
-| `meta.search` | Search by name/description |
-| `meta.dependencies` | Dependency graph |
-| `meta.find_orphans` | Objects without subsystem |
-| `meta.compare` | Compare two metadata versions |
-| `meta.find_undefined_refs` | References to non-existent objects |
-| `meta.subsystem_map` | Subsystem → objects map |
-| `meta.field_usage` | Where a field is used |
-| `meta.cross_ref` | Cross-reference: forms, modules, queries |
+### А: Метаданные (10)
+| Инструмент | Описание |
+|-----------|----------|
+| `meta.tree` | Дерево метаданных по типам |
+| `meta.structure` | Полная структура объекта |
+| `meta.search` | Поиск по имени/описанию |
+| `meta.dependencies` | Граф зависимостей |
+| `meta.find_orphans` | Объекты вне подсистем |
+| `meta.compare` | Сравнение двух версий метаданных |
+| `meta.find_undefined_refs` | Ссылки на несуществующие объекты |
+| `meta.subsystem_map` | Карта подсистем → объекты |
+| `meta.field_usage` | Где используется реквизит |
+| `meta.cross_ref` | Перекрёстные ссылки: формы, модули, запросы |
 
-### Б: Audit (15)
-| Tool | Description |
-|------|-------------|
-| `audit.e1_e9` | Audit defects E1–E9 |
-| `audit.query_antipatterns` | 15 query anti-patterns |
-| `audit.code_antipatterns` | BSL code anti-patterns |
-| `audit.security` | Hardcoded secrets |
-| `audit.deprecated_api` | Deprecated API usage |
-| `audit.pi_data` | Personal data patterns |
-| `audit.rls_roles` | Roles and RLS analysis |
-| `audit.duplicate_code` | Duplicate code blocks |
-| `audit.dead_code` | Unused functions |
-| `audit.module_complexity` | Cyclomatic complexity |
-| `audit.tms_integration` | TMS 2.0 integration audit |
-| `audit.exchange_safety` | Exchange plan safety |
-| `audit.version_check` | Platform version compat |
-| `audit.rnd_flag` | Loading flag (E8) check |
-| `audit.transaction_boundary` | Transaction boundary (E4) |
+### Б: Аудит (15)
+| Инструмент | Описание |
+|-----------|----------|
+| `audit.e1_e9` | Аудит дефектов E1–E9 |
+| `audit.query_antipatterns` | 15 антипаттернов запросов |
+| `audit.code_antipatterns` | Антипаттерны BSL-кода |
+| `audit.security` | Хардкод секретов |
+| `audit.deprecated_api` | Устаревшие методы платформы |
+| `audit.pi_data` | Шаблоны персональных данных |
+| `audit.rls_roles` | Анализ ролей и RLS-прав |
+| `audit.duplicate_code` | Дублирующийся код |
+| `audit.dead_code` | Невостребованные функции |
+| `audit.module_complexity` | Цикломатическая сложность |
+| `audit.tms_integration` | Аудит интеграции TMS 2.0 |
+| `audit.exchange_safety` | Безопасность планов обмена |
+| `audit.version_check` | Совместимость с версией платформы |
+| `audit.rnd_flag` | Проверка флага загрузки (E8) |
+| `audit.transaction_boundary` | Границы транзакций (E4) |
 
-### B: Query (8)
-| Tool | Description |
-|------|-------------|
-| `query.validate` | Syntax + semantic validation |
-| `query.optimize` | Optimization suggestions |
-| `query.explain` | Logical plan extraction |
-| `query.find_sinks` | Slow query patterns |
-| `query.generate` | Generate from description |
-| `query.check_fields` | Field validation |
-| `query.check_dimensions` | Register dimension validation |
-| `query.convert_to_async` | Sync to async conversion |
+### В: Запросы (8)
+| Инструмент | Описание |
+|-----------|----------|
+| `query.validate` | Синтаксическая и семантическая валидация |
+| `query.optimize` | Подсказки по оптимизации |
+| `query.explain` | Извлечение логического плана |
+| `query.find_sinks` | Медленные паттерны запросов |
+| `query.generate` | Генерация по описанию |
+| `query.check_fields` | Проверка полей по метаданным |
+| `query.check_dimensions` | Проверка измерителей регистров |
+| `query.convert_to_async` | Конвертация синхронных в асинхронные |
 
-### Г: EPF (8)
-| Tool | Description |
-|------|-------------|
-| `epf.validate` | Binary header validation |
-| `epf.roundtrip_check` | Build → dump → diff |
-| `epf.generate` | Generate from template |
-| `epf.extract_info` | Metadata extraction |
-| `epf.check_modules` | Module completeness |
-| `epf.compare` | Compare two EPFs |
-| `epf.validate_rules` | E1-E9 checklist |
-| `epf.list_commands` | External processor commands |
+### Г: EPF-артефакты (8)
+| Инструмент | Описание |
+|-----------|----------|
+| `epf.validate` | Проверка бинарного заголовка |
+| `epf.roundtrip_check` | Сборка → выгрузка → diff |
+| `epf.generate` | Генерация из шаблона |
+| `epf.extract_info` | Извлечение метаданных из EPF |
+| `epf.check_modules` | Проверка полноты модулей |
+| `epf.compare` | Сравнение двух EPF |
+| `epf.validate_rules` | Чеклист E1–E9 |
+| `epf.list_commands` | Список команд внешн. обработки |
 
-### Д: Form & SKD (8)
-| Tool | Description |
-|------|-------------|
-| `form.structure` | Form structure analysis |
-| `form.find_orphans` | Forms without objects |
-| `form.command_audit` | Command audit |
-| `skd.structure` | Report layout structure |
-| `skd.check_fields` | SKD field validation |
-| `skd.compare` | Compare SKD layouts |
-| `mxl.audit` | MXL layout audit |
-| `form.to_async` | Modal to async conversion |
+### Д: Формы и СКД (8)
+| Инструмент | Описание |
+|-----------|----------|
+| `form.structure` | Анализ структуры формы |
+| `form.find_orphans` | Формы без привязанных объектов |
+| `form.command_audit` | Аудит команд |
+| `skd.structure` | Структура компоновщика данных |
+| `skd.check_fields` | Проверка полей СКД |
+| `skd.compare` | Сравнение макетов СКД |
+| `mxl.audit` | Аудит макетов MXL |
+| `form.to_async` | Конвертация модальных вызовов |
 
-### Е: Integration (6)
-| Tool | Description |
-|------|-------------|
-| `exchange.analyze` | Exchange plan analysis |
-| `xdto.validate` | XDTO package validation |
-| `kshd.contract_check` | KSHD contract compliance |
-| `integration.retry_policy` | Retry policy audit |
-| `integration.cascade_check` | Cascade cancellation |
-| `integration.loop_prevention` | Loop prevention |
+### Е: Интеграции (6)
+| Инструмент | Описание |
+|-----------|----------|
+| `exchange.analyze` | Анализ планов обмена |
+| `xdto.validate` | Валидация XDTO-пакетов |
+| `kshd.contract_check` | Проверка контракта КШД |
+| `integration.retry_policy` | Аудит retry-политики |
+| `integration.cascade_check` | Аудит каскадов отмены |
+| `integration.loop_prevention` | Профилактика петель данных |
 
-### Ё: Test & Quality (6)
-| Tool | Description |
-|------|-------------|
-| `test.generate` | Test templates (YAxUnit/Vanessa) |
-| `test.coverage` | Coverage analysis |
-| `quality.metrics` | Quality metrics |
-| `quality.bulk_analyze` | Full analysis (anti-patterns + dupes + dead code) |
+### Ё: Тесты и качество (6)
+| Инструмент | Описание |
+|-----------|----------|
+| `test.generate` | Шаблоны тестов (YAxUnit/Vanessa) |
+| `test.coverage` | Анализ покрытия тестами |
+| `quality.metrics` | Метрики качества кода |
+| `quality.bulk_analyze` | Полная проверка (антипаттерны + дубли + мёртвый код) |
 | `quality.gate` | CI/CD quality gate |
-| `quality.trend` | Quality trends |
+| `quality.trend` | Тренды метрик по версиям |
 
-### Ж: DevTools (8)
-| Tool | Description |
-|------|-------------|
-| `bsl.syntax.help` | BSL function reference (30+) |
-| `bsl.generate_query` | Query generator |
-| `bsl.generate_print_form` | Print form template |
-| `bsl.generate_report` | SKD report template |
-| `bsl.convert_modal_async` | Modal call conversion |
-| `bsl.find_synonyms` | Function synonyms |
-| `bsl.version_check` | API version compatibility |
-| `config.template_apply` | Config templates |
+### Ж: DevTools-ассистенты (8)
+| Инструмент | Описание |
+|-----------|----------|
+| `bsl.syntax.help` | Справка по функциям платформы (30+) |
+| `bsl.generate_query` | Генератор запросов |
+| `bsl.generate_print_form` | Шаблон печатной формы |
+| `bsl.generate_report` | Шаблон отчёта СКД |
+| `bsl.convert_modal_async` | Модальные → асинхронные вызовы |
+| `bsl.find_synonyms` | Синонимы функций (СтрНайти ↔ StrFind) |
+| `bsl.version_check` | Доступность метода в версии платформы |
+| `config.template_apply` | Шаблоны конфигурации |
 
-### З: Config (5)
-| Tool | Description |
-|------|-------------|
-| `config.diff` | Compare two config builds |
-| `config.validate_build` | Build readiness check |
-| `config.added_objects` | Added/removed objects |
-| `config.checklist` | Pre-commit checklist |
-| `config.generate_report` | Full config report |
+### З: Конфигурация (5)
+| Инструмент | Описание |
+|-----------|----------|
+| `config.diff` | Сравнение двух сборок XML |
+| `config.validate_build` | Проверка готовности к сборке |
+| `config.added_objects` | Добавленные/удалённые объекты |
+| `config.checklist` | Чеклист перед коммитом |
+| `config.generate_report` | Полный отчёт о конфигурации |
 
-## Configuration
+## Конфигурация
 
-Set via environment variables or CLI args:
+Задаётся через переменные окружения или аргументы CLI:
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `ONEC_DEVTOOLS_CONFIG_PATH` | Path to 1C config XML dump | required for metadata tools |
-| `ONEC_DEVTOOLS_LOG_LEVEL` | Logging level | INFO |
-| `ONEC_DEVTOOLS_TEST_BASE` | Test 1C base for EPF round-trip | optional |
-| `ONEC_DEVTOOLS_1C_PATH` | Path to 1cv8.exe | optional |
+| Переменная | Описание | По умолчанию |
+|-----------|----------|-------------|
+| `ONEC_DEVTOOLS_CONFIG_PATH` | Путь к XML-выгрузке 1С | требуется для инструментов метаданных |
+| `ONEC_DEVTOOLS_LOG_LEVEL` | Уровень логирования | INFO |
+| `ONEC_DEVTOOLS_TEST_BASE` | Тестовая 1С-база для round-trip | опционально |
+| `ONEC_DEVTOOLS_1C_PATH` | Путь к 1cv8.exe | опционально |
 
-## Architecture
+## Архитектура
 
 ```
 ┌──────────────┐     ┌──────────────────┐     ┌──────────────┐
-│  MCP Client  │────▶│  MCP-сервер      │────▶│  1C Config   │
-│  (Kilo, etc) │◀────│  (Python)        │◀────│  (local XML) │
+│  MCP-клиент  │────▶│  MCP-сервер      │────▶│  1С Config   │
+│  (Kilo и др) │◀────│  (Python)        │◀────│  (локальный) │
 └──────────────┘     └──────────────────┘     └──────────────┘
 ```
 
-Works entirely with local XML files — no running 1C instance needed for static analysis.
+Работает исключительно с локальными XML-файлами — для статического анализа запущенная база 1С не нужна.
 
-## License
+## Лицензия
 
 MIT
