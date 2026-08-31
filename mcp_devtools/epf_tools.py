@@ -101,7 +101,7 @@ def build_epf_roundtrip_check(epf_path: str, config_path: str,
     
     if not os.environ.get("ONEC_DEVTOOLS_TEST_BASE"):
         result["issues"].append("Для round-trip проверки требуется настройка тестовой базы: ONEC_DEVTOOLS_TEST_BASE")
-        result["issues"].append("Например: Srvr=D021CUATAPP01D;Ref=UAT_Tupikov_TEST_01")
+        result["issues"].append("For example: Srvr=server.example;Ref=TestBase")
         return result
         
     # Step 1: Extract current EPF content

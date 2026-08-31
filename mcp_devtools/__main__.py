@@ -102,6 +102,10 @@ AVAILABLE_TOOLS = [
 ]
 
 
+# Keep CLI listing in sync with MCP discovery.
+from .tool_names import AVAILABLE_TOOLS as _MCP_AVAILABLE_TOOLS
+AVAILABLE_TOOLS = _MCP_AVAILABLE_TOOLS
+
 def main():
     """Main entry point."""
     parser = create_parser()

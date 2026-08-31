@@ -36,6 +36,10 @@ from .epf_tools import (
     validate_epf, extract_epf_info, build_epf_roundtrip_check,
     check_epf_modules_complete, compare_epfs,
 )
+from .command_catalog import designer_capabilities, ibcmd_capabilities
+from .ibcmd_runner import run_ibcmd
+from .onec_batch import apply_xml_and_build_cf
+from .tool_names import AVAILABLE_TOOLS
 
 logger = logging.getLogger(__name__)
 
@@ -87,6 +91,14 @@ class OneCDevToolsServer:
         # CATEGORY A: Metadata (10 tools)
         # ============================================================
         
+        @self.server.list_tools()
+        async def handle_list_tools() -> List[types.Tool]:
+            return [types.Tool(
+                name=tool_name,
+                description=f"1C DevTools operation: {tool_name}",
+                inputSchema={"type": "object", "additionalProperties": True},
+            ) for tool_name in AVAILABLE_TOOLS]
+
         @self.server.call_tool()
         async def handle_call_tool(name: str, arguments: Dict[str, Any]) -> List[types.TextContent]:
             """Main tool call handler — routes to specific tools."""
@@ -268,6 +280,27 @@ class OneCDevToolsServer:
             return self._tool_config_checklist(args)
         elif name == "config.generate_report":
             return self._tool_config_generate_report(args)
+        elif name == "designer.capabilities":
+            return {"capabilities": designer_capabilities()}
+        elif name == "designer.apply_xml_and_build_cf":
+            result = apply_xml_and_build_cf(
+                onec_executable=Path(args["onec_executable"]),
+                infobase=Path(args["infobase"]),
+                source_dir=Path(args["source_dir"]),
+                output_cf=Path(args["output_cf"]),
+                backup_dir=Path(args["backup_dir"]) if args.get("backup_dir") else None,
+                log_dir=Path(args["log_dir"]) if args.get("log_dir") else None,
+            )
+            return result.to_dict()
+        elif name == "ibcmd.capabilities":
+            return {"capabilities": ibcmd_capabilities()}
+        elif name == "ibcmd.run":
+            result = run_ibcmd(
+                ibcmd_executable=Path(args["ibcmd_executable"]),
+                arguments=args.get("arguments", []),
+                confirmed=bool(args.get("confirmed", False)),
+            )
+            return result.to_dict()
             
         else:
             return {"error": f"Unknown tool: {name}. Run 'devtool.available_tools' to see list."}

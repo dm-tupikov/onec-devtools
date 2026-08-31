@@ -1,6 +1,6 @@
 # MCP:1C-DevTools — сервер для разработки 1С
 
-**74 инструмента для разработки в 1С:Предприятие** — статический анализ, аудит кода, проверка запросов, верификация EPF и многое другое.
+**78 инструментов для разработки в 1С:Предприятие** — статический анализ, аудит кода, проверка запросов, верификация EPF, пакетная работа с конфигурацией и `ibcmd`.
 
 Работает с локальными XML-выгрузками конфигурации 1С — **не требует запущенной базы 1С**.
 
@@ -168,3 +168,54 @@ python -m mcp_devtools --config-path ./config-dump
 ## Лицензия
 
 MIT
+
+## Пакетная автоматизация 1С
+
+Проект содержит проверяемый workflow для Windows:
+
+```bash
+python scripts/onec-batch.py designer-capabilities
+python scripts/onec-batch.py ibcmd-capabilities
+python scripts/onec-batch.py ibcmd-help --ibcmd "C:\\Program Files\\1cv8\\8.3.21.1393\\bin\\ibcmd.exe"
+python scripts/onec-batch.py apply-and-build-cf \
+  --onec "C:\\Program Files\\1cv8\\8.3.21.1393\\bin\\1cv8.exe" \
+  --infobase "C:\\Bases\\Test" \
+  --source "C:\\src\\cf" \
+  --output "C:\\artifacts\\build.cf"
+```
+
+### Что автоматизировано
+
+- каталог пакетных операций `1cv8.exe DESIGNER`;
+- каталог и discovery фактических команд `ibcmd` через `ibcmd help`;
+- backup CF перед изменяющими операциями;
+- загрузка XML через `/LoadConfigFromFiles`;
+- применение через `/UpdateDBCfg`;
+- выгрузка итогового CF через `/DumpCfg`;
+- сбор exit code, `/Out`-лога, размера и SHA-256;
+- fail-fast и возможность rollback из backup CF;
+- передача аргументов без `shell=True`, что сохраняет пробелы и кириллические пути.
+
+Подробная матрица команд находится в `skills/onec-batch-operations/SKILL.md`.
+
+### Подключение к MCP-клиенту
+
+Локальный stdio-запуск из корня репозитория:
+
+```json
+{
+  "mcpServers": {
+    "onec-devtools": {
+      "command": "python",
+      "args": ["-m", "mcp_devtools", "--config-path", "C:/path/to/config-dump"],
+      "cwd": "C:/path/to/onec-devtools"
+    }
+  }
+}
+```
+
+Каталог `config-dump` должен содержать XML-выгрузку конфигурации. Путь к `1cv8.exe`, тестовой ИБ и другим ресурсам передаётся через переменные окружения или аргументы; значения в документации намеренно обезличены.
+
+Для пакетных операций MCP-клиент вызывает `designer.capabilities` или `ibcmd.capabilities`, затем — соответствующую операцию. Изменяющие операции требуют явного `confirmed=true`; credentials не записываются в логи.
+
+Публичный MCP-клиент должен использовать `list_tools`, а не полагаться на README: сервер обязан объявлять доступные инструменты через MCP discovery.

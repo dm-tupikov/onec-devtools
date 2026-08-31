@@ -18,7 +18,7 @@ services:
       - ONEC_DEVTOOLS_CONFIG_PATH=/data/config
       - ONEC_DEVTOOLS_LOG_LEVEL=INFO
       # Uncomment for EPF round-trip testing:
-      # - ONEC_DEVTOOLS_TEST_BASE=Srvr=D021CUATAPP01D;Ref=UAT_Tupikov_TEST_01
+      # - ONEC_DEVTOOLS_TEST_BASE=Srvr=server.example;Ref=TestBase
       # - ONEC_DEVTOOLS_1C_PATH=/opt/1cv8/bin/1cv8.exe
     # Stdio mode (default for MCP clients)
     command: ["--log-level", "INFO"]
