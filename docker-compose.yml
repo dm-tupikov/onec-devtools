@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  onec-devtools:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: onec-devtools:latest
+    container_name: onec-devtools
+    stdin_open: true
+    tty: true
+    volumes:
+      # Mount 1C config dump for analysis
+      - ./config-dump:/data/config:ro
+      # Mount code for audit tools
+      - ./src/cf:/data/src:ro
+    environment:
+      - ONEC_DEVTOOLS_CONFIG_PATH=/data/config
+      - ONEC_DEVTOOLS_LOG_LEVEL=INFO
+      # Uncomment for EPF round-trip testing:
+      # - ONEC_DEVTOOLS_TEST_BASE=Srvr=D021CUATAPP01D;Ref=UAT_Tupikov_TEST_01
+      # - ONEC_DEVTOOLS_1C_PATH=/opt/1cv8/bin/1cv8.exe
+    # Stdio mode (default for MCP clients)
+    command: ["--log-level", "INFO"]
+    
+  # Optional: HTTP mode with SSE transport
+  onec-devtools-http:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: onec-devtools:latest
+    container_name: onec-devtools-http
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./config-dump:/data/config:ro
+      - ./src/cf:/data/src:ro
+    environment:
+      - ONEC_DEVTOOLS_CONFIG_PATH=/data/config
+      - ONEC_DEVTOOLS_LOG_LEVEL=INFO
+    command: ["--log-level", "INFO"]
