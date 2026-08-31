@@ -31,7 +31,7 @@ pip install -r requirements.txt
 python -m mcp_devtools --config-path ./config-dump
 ```
 
-## Доступные инструменты (74)
+## Доступные инструменты (78)
 
 ### А: Метаданные (10)
 | Инструмент | Описание |

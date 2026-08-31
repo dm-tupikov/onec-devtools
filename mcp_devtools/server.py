@@ -1,4 +1,4 @@
-"""MCP DevTools Server — 74 tools for 1C:Enterprise development.
+"""MCP DevTools Server — 78 tools for 1C:Enterprise development.
 
 Provides static analysis tools for 1C configuration development:
 - Metadata analysis and structure inspection
@@ -58,7 +58,7 @@ class OneCDevToolsServer:
             lifespan=self._lifespan
         )
         
-        # Register all 74 tools
+        # Register all 78 tools
         self._register_tools()
         
     def _ensure_config_path(self):
@@ -85,7 +85,7 @@ class OneCDevToolsServer:
         yield {"parser": self.parser, "config": self.config}
         
     def _register_tools(self):
-        """Register all 74 MCP tools."""
+        """Register all 78 MCP tools."""
         
         # ============================================================
         # CATEGORY A: Metadata (10 tools)

@@ -20,7 +20,7 @@ def setup_logging(level: str = "INFO"):
 def create_parser() -> argparse.ArgumentParser:
     """Create CLI argument parser."""
     parser = argparse.ArgumentParser(
-        description="1C DevTools MCP Server — 74 tools for 1C:Enterprise development"
+        description="1C DevTools MCP Server — 78 tools for 1C:Enterprise development"
     )
     
     parser.add_argument(
