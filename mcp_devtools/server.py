@@ -2,7 +2,7 @@
 
 Provides static analysis tools for 1C configuration development:
 - Metadata analysis and structure inspection
-- BSL code auditing (E1-E9 defects, security, anti-patterns)
+- BSL code auditing (queue leaks, transactions, loading flags, security, anti-patterns)
 - Query validation and optimization
 - EPF artifact verification
 - Form and SKD analysis
@@ -398,12 +398,12 @@ class OneCDevToolsServer:
     # --- CATEGORY Б: Audit (15) ---
     
     def _tool_audit_e1_e9(self, args: Dict) -> Dict:
-        """Б1: audit E1-E9 defects in BSL code."""
+        """Б1: audit common BSL defects — queue leaks, transactions, loading flags, KPI logic."""
         code_path = args.get("code_path", "")
         if not code_path:
             return {"error": "code_path required (path to .bsl file or directory)"}
             
-        issues = {"e1": [], "e2": [], "e3": [], "e4": [], "e6": [], "e7": [], "e8": [], "e9": []}
+        issues = {"queue_leak": [], "case_mismatch": [], "transaction_boundary": [], "loading_flag": [], "kpi_logic": []}
         
         path = Path(code_path)
         files_to_scan = []
@@ -423,34 +423,34 @@ class OneCDevToolsServer:
                 code = bsl_file.read_text(encoding="utf-8", errors="replace")
                 filename = bsl_file.name
                 
-                # E1: Continue without unregister (in exchange loops)
+                # Queue leak: Continue in loop without unregistering
                 if "Продолжить" in code and ("Цикл" in code or "Выбрать" in code):
                     lines = code.split("\n")
                     for j, line in enumerate(lines):
                         if "Продолжить" in line and "//" not in line:
                             context = "\n".join(lines[max(0,j-10):j])
-                            if any(kw in context for kw in ["Цикл", "Выбрать", "Обмен"]):
-                                issues["e1"].append({"file": str(bsl_file), "line": j+1})
+                            if any(kw in context for kw in ["Цикл", "Выбрать", "Обмен", "Continue"]):
+                                issues["queue_leak"].append({"file": str(bsl_file), "line": j+1})
                                 
-                # E3: Case mismatch (snake_case in JSON)
-                if "snake" in code.lower() or "_address" in code.lower() or "_time" in code.lower():
-                    if "Получить" in code or "Нормализ" in code:
-                        issues["e3"].append({"file": str(bsl_file), "line": 1,
+                # Case mismatch: snake_case keys not converted to PascalCase
+                if "snake" in code.lower() or "_address" in code.lower() or "_time" in code.lower() or "_type" in code.lower():
+                    if "Получить" in code or "Нормализ" in code or "convert" in code.lower():
+                        issues["case_mismatch"].append({"file": str(bsl_file), "line": 1,
                                             "note": "Possible snake_case to PascalCase mapping issue"})
                                         
-                # E4: Transaction boundary check
+                # Transaction boundary: НачатьТранзакцию without ЗафиксироватьТранзакцию
                 if "НачатьТранзакцию" in code or "ЗафиксироватьТранзакцию" in code:
-                    issues["e4"].append({"file": str(bsl_file), "note": "Transaction blocks found — verify isolation"})
+                    issues["transaction_boundary"].append({"file": str(bsl_file), "note": "Transaction blocks found — verify isolation"})
                     
-                # E8: Loading flag check
+                # Loading flag: ПриЗаписи without Загрузка flag
                 if "Загрузка" in code or "ОбменДанными" in code:
                     if "ПриЗаписи" in code or "ПередЗаписью" in code:
-                        issues["e8"].append({"file": str(bsl_file), "note": "Write event handlers found — verify loading flag"})
+                        issues["loading_flag"].append({"file": str(bsl_file), "note": "Write event handlers found — verify loading flag"})
                         
-                # E9: KPI logic check
-                if ("КИП" in code or "КТГ" in code or "КВЛ" in code):
-                    if "уатСостояниеТС" in code:
-                        issues["e9"].append({"file": str(bsl_file), "note": "KPI calculation found — verify Регистратор filter"})
+                # KPI logic: check for Регистратор filter in KPI calculations
+                if ("КИП" in code or "КТГ" in code or "КВЛ" in code or "KPI" in code):
+                    if "Регистратор" in code or "Registrar" in code or "Document" in code:
+                        issues["kpi_logic"].append({"file": str(bsl_file), "note": "KPI calculation found — verify source document filter"})
                         
             except Exception as e:
                 issues["_errors"] = issues.get("_errors", [])
@@ -690,7 +690,7 @@ class OneCDevToolsServer:
         return {"results": results, "files_with_issues": sum(1 for r in results if r["issues"])}
         
     def _tool_audit_tms_integration(self, args: Dict) -> Dict:
-        """Б11: TMS 2.0 integration audit."""
+        """Б11: audit external integration code — transport contract, idempotency, case mapping."""
         code_path = args.get("code_path", "")
         if not code_path:
             return {"error": "code_path required"}
@@ -705,25 +705,25 @@ class OneCDevToolsServer:
                 
         issues = []
         
-        # Check for E1: Continue in exchange loop without unregister
-        if "ОбменСТМС20" in code or "ОбменТМС20" in code:
-            if "Продолжить" in code:
-                issues.append({"defect": "E1", "message": "Found Continue in TMS exchange — verify registration removal"})
+        # Check for Continue in exchange loop without unregister
+        if "Обмен" in code and "Продолжить" in code:
+            if "рег." not in code.lower() or "unregister" not in code.lower():
+                issues.append({"defect": "queue_leak", "message": "Continue in exchange loop — verify registration removal"})
                 
-        # Check for E2: Transport contract
+        # Check for transport contract: Base64 vs JSON
         if "records" in code and ("value" in code or "key" in code):
             if "Base64" in code or "base64" in code:
-                issues.append({"defect": "E2", "message": "Base64 decoding found — verify JSON vs binary contract"})
+                issues.append({"defect": "transport_contract", "message": "Base64 decoding found — verify JSON vs binary contract"})
                 
-        # Check for E3: Case mismatch
-        if "ПолучитьПункты" in code or "Нормализ" in code:
-            if "location" in code.lower() and "Location" not in code:
-                issues.append({"defect": "E3", "message": "Possible snake_case to PascalCase mapping issue"})
+        # Check for case mismatch in mapping
+        if "snake" in code.lower() or "_" in code:
+            if "Получить" in code or "Нормализ" in code:
+                issues.append({"defect": "case_mismatch", "message": "Possible case mapping issue in data conversion"})
                 
-        # Check for E6: Idempotency
+        # Check for idempotency: write without uniqueness check
         if "Код" in code and ("Записать" in code or "СоздатьДокумент" in code):
             if "ПроверитьУникальность" not in code and "НайтиПоРеквизиту" not in code:
-                issues.append({"defect": "E6", "message": "Write without uniqueness check"})
+                issues.append({"defect": "idempotency", "message": "Write without uniqueness check"})
                 
         return {"issues": issues, "scanned": True}
         
@@ -776,7 +776,7 @@ class OneCDevToolsServer:
         return {"incompatibilities": incompatibilities, "count": len(incompatibilities)}
         
     def _tool_audit_rnd_flag(self, args: Dict) -> Dict:
-        """Б14: loading flag (E8) audit."""
+        """Б14: audit loading flag in write event handlers."""
         code_path = args.get("code_path", "")
         if not code_path:
             return {"error": "code_path required"}
@@ -795,18 +795,18 @@ class OneCDevToolsServer:
             
             # Look for write handlers
             if "ПриЗаписи" in code or "ПередЗаписью" in code:
-                # Check if Загрузка flag is set
-                if "ОбменДанными.Загрузка" not in code and "Загрузка" not in code:
+                # Check if loading flag is set
+                if "Загрузка" not in code and "loading" not in code.lower():
                     issues.append({
                         "file": str(bsl_file),
                         "issue": "Write event handler without loading flag check",
-                        "defect": "E8",
+                        "defect": "loading_flag",
                     })
                     
         return {"issues": issues, "count": len(issues)}
         
     def _tool_audit_transaction_boundary(self, args: Dict) -> Dict:
-        """Б15: transaction boundary audit (E4)."""
+        """Б15: audit transaction boundary consistency."""
         code_path = args.get("code_path", "")
         if not code_path:
             return {"error": "code_path required"}
@@ -831,13 +831,13 @@ class OneCDevToolsServer:
                     issues.append({
                         "file": str(bsl_file),
                         "issue": "НачатьТранзакцию without ЗафиксироватьТранзакцию",
-                        "defect": "E4",
+                        "defect": "transaction_boundary",
                     })
                 elif has_commit and not has_begin:
                     issues.append({
                         "file": str(bsl_file),
                         "issue": "ЗафиксироватьТранзакцию without НачатьТранзакцию",
-                        "defect": "E4",
+                        "defect": "transaction_boundary",
                     })
                     
         return {"issues": issues, "count": len(issues)}
@@ -1046,12 +1046,12 @@ class OneCDevToolsServer:
         return compare_epfs(args.get("epf1", ""), args.get("epf2", ""))
         
     def _tool_epf_validate_rules(self, args: Dict) -> Dict:
-        """Г7: validate EPF against project rules (E1-E9)."""
+        """Г7: validate EPF against common BSL audit rules."""
         code_path = args.get("code_path", "")
         if not code_path:
             return {"error": "code_path or epf_path required"}
             
-        # Run E1-E9 audit on the extracted code
+        # Run common BSL audit on the extracted code
         return self._tool_audit_e1_e9({"code_path": code_path})
         
     def _tool_epf_list_commands(self, args: Dict) -> Dict:
@@ -1274,14 +1274,14 @@ class OneCDevToolsServer:
                 
         issues = []
         
-        # Check for records[0].value pattern (E2)
+        # Check for records pattern with potential Base64 vs JSON confusion
         if "records" in code and ("value" in code):
             if "JSON" not in code and "json" not in code:
-                issues.append({"issue": "E2", "message": "records value decoding — verify JSON vs Base64"})
+                issues.append({"issue": "transport_contract", "message": "records value decoding — verify JSON vs Base64"})
                 
-        # Check for routing (E5)
+        # Check for routing handlers
         if "routing" in code.lower() or "routingType" in code.lower():
-            issues.append({"issue": "E5", "message": "RTM routing found — verify handler coverage"})
+            issues.append({"issue": "routing_coverage", "message": "Message routing found — verify all types are handled"})
             
         return {"issues": issues, "contract_compliant": len(issues) == 0}
         
@@ -1354,16 +1354,16 @@ class OneCDevToolsServer:
         if "Загрузка" not in code and ("ПриЗаписи" in code or "ПередЗаписью" in code):
             issues.append({"issue": "No loading flag — incoming data may trigger outgoing registration"})
             
-        # Check for exchange plan filtering
-        if "ОбменСТМС20" in code:
-            if "загружено" not in code.lower() and "Изменения" not in code:
-                issues.append({"issue": "No source differentiation for TMS20 changes"})
+        # Check for exchange plan filtering and source differentiation
+        if "Обмен" in code or "Exchange" in code:
+            if "загружено" not in code.lower() and "source" not in code.lower():
+                issues.append({"issue": "No source differentiation for incoming changes"})
                 
         return {
             "issues": issues,
             "loop_prevention": len(issues) == 0,
-            "recommendations": ["Set ОбменДанными.Загрузка = Истина before write",
-                               "Check source of changes (TMS20 vs local)"],
+            "recommendations": ["Set loading flag before write",
+                               "Check source of changes (external vs local)"],
         }
         
     # --- CATEGORY Ё: Test & Quality (6) ---
@@ -1785,7 +1785,7 @@ class OneCDevToolsServer:
         return self._tool_config_diff(args)  # Same implementation
         
     def _tool_config_checklist(self, args: Dict) -> Dict:
-        """З4: pre-commit checklist (E1-E9)."""
+        """З4: pre-commit checklist — common BSL quality gates."""
         config_path = args.get("config_path", self.config.config_path)
         if not config_path:
             return {"error": "config_path required"}
@@ -1798,9 +1798,9 @@ class OneCDevToolsServer:
         
         # Pre-commit checks
         results["pre_checks"] = [
-            {"check": "E1 — Queue leak", "status": "manual_review", "note": "Review all Continue statements in exchange loops"},
-            {"check": "E4 — Transaction boundary", "status": "manual_review", "note": "Verify all BeginTransaction have corresponding Commit"},
-            {"check": "E8 — Loading flag", "status": "manual_review", "note": "Verify ОбменДанными.Загрузка before writes"},
+            {"check": "Queue leak", "status": "manual_review", "note": "Review all Continue statements in exchange loops"},
+            {"check": "Transaction boundary", "status": "manual_review", "note": "Verify all BeginTransaction have corresponding Commit"},
+            {"check": "Loading flag", "status": "manual_review", "note": "Verify loading flag before writes in event handlers"},
             {"check": "Security", "status": "auto", "note": "Run audit.security tool"},
         ]
         

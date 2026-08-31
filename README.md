@@ -50,7 +50,7 @@ python -m mcp_devtools --config-path ./config-dump
 ### Б: Аудит (15)
 | Инструмент | Описание |
 |-----------|----------|
-| `audit.e1_e9` | Аудит дефектов E1–E9 |
+| `audit.e1_e9` | Аудит BSL-кода: очереди, транзакции, флаги загрузки, логика KPI |
 | `audit.query_antipatterns` | 15 антипаттернов запросов |
 | `audit.code_antipatterns` | Антипаттерны BSL-кода |
 | `audit.security` | Хардкод секретов |
@@ -60,11 +60,11 @@ python -m mcp_devtools --config-path ./config-dump
 | `audit.duplicate_code` | Дублирующийся код |
 | `audit.dead_code` | Невостребованные функции |
 | `audit.module_complexity` | Цикломатическая сложность |
-| `audit.tms_integration` | Аудит интеграции TMS 2.0 |
+| `audit.tms_integration` | Аудит внешних интеграций: транспорт, идемпотентность |
 | `audit.exchange_safety` | Безопасность планов обмена |
 | `audit.version_check` | Совместимость с версией платформы |
-| `audit.rnd_flag` | Проверка флага загрузки (E8) |
-| `audit.transaction_boundary` | Границы транзакций (E4) |
+| `audit.rnd_flag` | Проверка флага загрузки в обработчиках записи |
+| `audit.transaction_boundary` | Согласованность границ транзакций |
 
 ### В: Запросы (8)
 | Инструмент | Описание |
@@ -87,7 +87,7 @@ python -m mcp_devtools --config-path ./config-dump
 | `epf.extract_info` | Извлечение метаданных из EPF |
 | `epf.check_modules` | Проверка полноты модулей |
 | `epf.compare` | Сравнение двух EPF |
-| `epf.validate_rules` | Чеклист E1–E9 |
+| `epf.validate_rules` | Проверка по общим правилам BSL-аудита |
 | `epf.list_commands` | Список команд внешн. обработки |
 
 ### Д: Формы и СКД (8)
