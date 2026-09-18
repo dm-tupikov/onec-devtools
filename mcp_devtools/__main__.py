@@ -6,6 +6,8 @@ import sys
 
 from .config import Config
 from .server import OneCDevToolsServer
+from mcp.server.models import InitializationOptions
+from mcp.server.lowlevel import NotificationOptions
 
 
 def setup_logging(level: str = "INFO"):
@@ -125,7 +127,7 @@ def main():
     config.config_path = args.config_path or config.config_path
     config.server_name = args.server_name
     config.test_base_server = args.test_base or config.test_base_server
-    config.headless_1c_path = args.onec_path or config.headless_1c_path
+    config.headless_1c_path = getattr(args, "onec_path", None) or getattr(args, "1c_path", "") or config.headless_1c_path
     
     if not config.config_path:
         print("Warning: --config-path not set. Metadata-dependent tools will have limited functionality.", 
@@ -138,11 +140,21 @@ def main():
     server = OneCDevToolsServer(config)
     
     async def run():
-        async with stdio_server(server.server.handler) as (read_stream, write_stream):
-            await server.server.run(read_stream, write_stream)
+        async with stdio_server() as (read_stream, write_stream):
+            await server.server.run(
+                read_stream, write_stream,
+                InitializationOptions(
+                    server_name=server.config.server_name,
+                    server_version=server.config.server_version,
+                    capabilities=server.server.get_capabilities(
+                        notification_options=NotificationOptions(),
+                        experimental_capabilities={},
+                    ),
+                ),
+            )
     
     try:
-        asyncio_run(run)
+        asyncio_run(run())
     except KeyboardInterrupt:
         print("\nServer stopped.", file=sys.stderr)
 
