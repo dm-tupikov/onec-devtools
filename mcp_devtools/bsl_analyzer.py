@@ -5,7 +5,9 @@ for 1C Enterprise (BSL - Business Languages) code.
 """
 
 import re
+import os
 import logging
+from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
 logger = logging.getLogger(__name__)
@@ -553,13 +555,16 @@ BSL_SYNTAX_HELP = {
     "СтрПолучитьСтроку": {"sig": "СтрПолучитьСтроку(Строка, Номер)", "desc": "Возвращает указанную строку из многострочной", "since": "8.0.0"},
     "СтрЧислоСтрок": {"sig": "СтрЧислоСтрок(Строка)", "desc": "Возвращает количество строк", "since": "8.0.0"},
     "СокрЛ": {"sig": "СокрЛ(Строка)", "desc": "Удаляет пробелы слева", "since": "8.0.0"},
-    "СокрП": {"sig": "СокрП(Стokka)", "desc": "Удаляет пробелы справа", "since": "8.0.0"},
+    "СокрП": {"sig": "СокрП(Строка)", "desc": "Удаляет пробелы справа", "since": "8.0.0"},
     "СокрЛП": {"sig": "СокрЛП(Строка)", "desc": "Удаляет пробелы слева и справа", "since": "8.0.0"},
     "Число": {"sig": "Число(Строка)", "desc": "Преобразует строку в число", "since": "8.0.0"},
     "Строка": {"sig": "Строка(Значение)", "desc": "Преобразует значение в строку", "since": "8.0.0"},
-    "ДатаГод": {"sig": "ДатаГод(Дата)", "desc": "Возвращает год из даты", "since": "8.0.0"},
-    "ДатаМесяц": {"sig": "ДатаМесяц(Дата)", "desc": "Возвращает месяц из даты", "since": "8.0.0"},
-    "ДатаЧисло": {"sig": "ДатаЧисло(Дата)", "desc": "Возвращает день месяца из даты", "since": "8.0.0"},
+    "Год": {"sig": "Год(Дата)", "desc": "Возвращает год из даты (проверено на 8.3)", "since": "8.0.0"},
+    "Месяц": {"sig": "Месяц(Дата)", "desc": "Возвращает месяц из даты (проверено на 8.3)", "since": "8.0.0"},
+    "День": {"sig": "День(Дата)", "desc": "Возвращает день месяца из даты (проверено на 8.3)", "since": "8.0.0"},
+    "Час": {"sig": "Час(Дата)", "desc": "Возвращает час из даты", "since": "8.0.0"},
+    "Минута": {"sig": "Минута(Дата)", "desc": "Возвращает минуты из даты", "since": "8.0.0"},
+    "Секунда": {"sig": "Секунда(Дата)", "desc": "Возвращает секунды из даты", "since": "8.0.0"},
     "ТекущаяДата": {"sig": "ТекущаяДата()", "desc": "Возвращает текущие дату и время", "since": "8.0.0"},
     "НачалоГода": {"sig": "НачалоГода(Дата)", "desc": "Начало года для указанной даты", "since": "8.0.0"},
     "КонецГода": {"sig": "КонецГода(Дата)", "desc": "Конец года для указанной даты", "since": "8.0.0"},
@@ -568,61 +573,178 @@ BSL_SYNTAX_HELP = {
     "НачалоДня": {"sig": "НачалоДня(Дата)", "desc": "Начало дня для указанной даты", "since": "8.0.0"},
     "КонецДня": {"sig": "КонецДня(Дата)", "desc": "Конец дня для указанной даты", "since": "8.0.0"},
     "ДобавитьМесяц": {"sig": "ДобавитьМесяц(Дата, Число)", "desc": "Добавляет указанное число месяцев", "since": "8.0.0"},
-    "НайтиПробел": {"sig": "НайтиПробел(Строка [, Направление])", "desc": "Находит пробел в строке", "since": "8.0.0"},
-    "РегБ": {"sig": "РегБ(Строка)", "desc": "Верхний регистр", "since": "8.0.0"},
-    "РегМ": {"sig": "РегМ(Строка)", "desc": "Нижний регистр", "since": "8.0.0"},
+    "ВРег": {"sig": "ВРег(Строка)", "desc": "Верхний регистр (проверено на 8.3)", "since": "8.0.0"},
+    "НРег": {"sig": "НРег(Строка)", "desc": "Нижний регистр (проверено на 8.3)", "since": "8.0.0"},
     "Формат": {"sig": "Формат(Значение, СтрокаФормата)", "desc": "Форматирует значение по шаблону", "since": "8.0.0"},
-    "ЭтоНомер": {"sig": "ЭтоНомер(Значение)", "desc": "Истина, если значение — номер", "since": "8.0.0"},
-    "ЭтоДата": {"sig": "ЭтоДата(Значение)", "desc": "Истина, если значение — дата", "since": "8.0.0"},
-    "ЭтоЧисло": {"sig": "ЭтоЧисло(Значение)", "desc": "Истина, если значение — число", "since": "8.0.0"},
-    "ЗаполнитьЗначенияСвойств": {"sig": "ЗаполнитьЗначенияСвойств(Объект, Источник)", "desc": "Копирует значения свойств объекта", "since": "8.0.0"},
-    "Заполнить": {"sig": "Заполнить(Назначения, Источники [, МассивПолей])", "desc": "Заполняет реквизиты из источника", "since": "8.0.0"},
-    "СоздатьОбъект": {"sig": "СоздатьОбъект(Имя)", "desc": "Создает COM-объект (устаревший)", "since": "8.0.0"},
+    "ЗаполнитьЗначенияСвойств": {"sig": "ЗаполнитьЗначенияСвойств(Приемник, Источник [, ...])", "desc": "Копирует значения свойств; процедура, вызывается оператором", "since": "8.0.0"},
 }
+# Проверено: в API 8.3 НЕТ этих имён (ответ платформы «не определена»).
+# Раньше они ошибочно присутствовали в этой справке как «функции 8.0».
+BSL_ABSENT_NAMES = [
+    "ДатаГод", "ДатаМесяц", "ДатаЧисло",      # год/месяц/день — НЕ функции платформы
+    "НайтиПробел",                             # нет такого имени
+    "РегБ", "РегМ",                            # правильные имена: ВРег / НРег
+    "ЭтоНомер", "ЭтоДата", "ЭтоЧисло",         # нет таких функций проверки
+    "Заполнить",                               # есть ЗаполнитьЗначенияСвойств, нет Заполнить
+    "СоздатьОбъект",                           # API 7.7, в 8.x отсутствует
+]
+
+import json as _json
+
+def _load_verified_api() -> Dict[str, Any]:
+    """Верифицированный реестр имён платформы (получен ИСПОЛНЕНИЕМ на живой ИБ).
+
+    Файл mcp_devtools/verified_api.json — источник истины по существованию имён:
+    verdict=exists подтверждён разрешением имени компилятором, verdict=absent —
+    явным «не определена». Пустой/отсутствующий файл => {} (никаких выдуманных
+    ответов: отсутствие записи НЕ означает «не существует»).
+    """
+    for raw in (
+        os.environ.get("ONEC_DEVTOOLS_SYNTAX_HELP_PATH", ""),
+        str(Path(__file__).with_name("verified_api.json")),
+    ):
+        try:
+            cand = Path(raw) if raw else None
+            if cand is not None and cand.exists():
+                return _json.loads(cand.read_text(encoding="utf-8"))
+        except Exception:
+            logger.warning("Не удалось прочитать справочник API: %s", raw)
+    return {}
+
+
+_VERIFIED_API_CACHE: Optional[Dict[str, Any]] = None
+
+
+def get_verified_api() -> Dict[str, Any]:
+    """Ленивый доступ к справочнику: читается один раз, при первом вызове
+    инструмента — уже после того, как CLI/env путь применён в main()."""
+    global _VERIFIED_API_CACHE
+    if _VERIFIED_API_CACHE is None:
+        _VERIFIED_API_CACHE = _load_verified_api()
+    return _VERIFIED_API_CACHE
+
+
+
+
+def check_name_exists(name: str) -> Dict[str, Any]:
+    """Честный вердикт по существованию имени.
+
+    exists  — имя разрешено компилятором 8.3 (подтверждено исполнением).
+    absent  — платформа ответила «не определена / метод объекта не обнаружен».
+    unknown — имя не проверялось; это НЕ доказательство отсутствия.
+    """
+    api = get_verified_api()
+    reg = (api.get("global_functions") or {})
+    for k, v in reg.items():
+        if k.lower() == name.lower():
+            return {"name": k, "verdict": v.get("verdict"), "kind": v.get("kind"),
+                    "scope": "global_function", "checked_at": api.get("checked_at")}
+    for k, verdict in (api.get("catalog_manager_methods") or {}).items():
+        if k.lower() == name.lower():
+            return {"name": k, "verdict": verdict, "scope": "catalog_manager_method",
+                    "checked_at": api.get("checked_at"),
+                    "note": "проверено на менеджере Справочники (Справочники.<Имя>); "
+                            "для других менеджеров проверять отдельно"}
+    return {"name": name, "verdict": "unknown",
+            "message": "имя не проверялось на живой платформе; отсутствие записи "
+                       "не означает, что метода нет — проверь ИТС или оракулом"}
 
 
 def get_bsl_syntax_help(func_name: str = "") -> Dict[str, Any]:
-    """Get BSL syntax help for a function."""
+    """Get BSL syntax help for a function.
+
+    Ответ честный по трём состояниям: есть в verified-справочнике (exists,
+    подтверждено исполнением на 8.3) / доказанно отсутствует (absent) /
+    не проверялось (unknown — не выдавать за отсутствие).
+    """
     if func_name:
-        # Search for the function (case-insensitive)
+        verdict = check_name_exists(func_name)
         for name, info in BSL_SYNTAX_HELP.items():
             if name.lower() == func_name.lower():
-                return {"function": name, **info}
-        return {"error": f"Функция '{func_name}' не найдена в справочнике"}
-        
-    # Return all functions
-    return {"count": len(BSL_SYNTAX_HELP), "functions": BSL_SYNTAX_HELP}
+                return {"function": name, **info,
+                        "verified": verdict["verdict"],
+                        "verified_scope": verdict.get("scope"),
+                        "verified_at": verdict.get("checked_at")}
+        if verdict["verdict"] == "absent":
+            return {"name": func_name, "verified": "absent",
+                    "message": f"Имени '{func_name}' нет в API 8.3: платформа ответила "
+                               f"«не определена». Не использовать в коде."}
+        if verdict["verdict"] == "exists":
+            # имя подтверждено исполнением, но сигнатуры в этой справке нет
+            # (например метод менеджера или функция вне BSL_SYNTAX_HELP)
+            return {"name": verdict["name"], "verified": "exists",
+                    "kind": verdict.get("kind"), "verified_scope": verdict.get("scope"),
+                    "verified_at": verdict.get("checked_at"),
+                    "note": verdict.get("note", ""),
+                    "message": "имя подтверждено исполнением на 8.3; сигнатуру смотри в ИТС"}
+        return {"error": f"Функция '{func_name}' не найдена в справочнике",
+                "verified": "unknown",
+                "message": "отсутствие в этой справке ≠ отсутствие в платформе; "
+                           "имя не проверялось исполнением"}
+
+    api = get_verified_api()
+    return {
+        "count": len(BSL_SYNTAX_HELP),
+        "functions": BSL_SYNTAX_HELP,
+        "absent_in_8_3": BSL_ABSENT_NAMES,
+        "verified_registry": {
+            "source": api.get("schema", "n/a"),
+            "checked_at": api.get("checked_at", "n/a"),
+            "platform": api.get("platform_version", "n/a"),
+            "global_functions": len(api.get("global_functions") or {}),
+            "catalog_manager_methods": len(api.get("catalog_manager_methods") or {}),
+        },
+    }
 
 
 def find_bsl_synonyms(func_name: str) -> Dict[str, Any]:
-    """Find BSL synonyms (Russian/English equivalents)."""
-    synonyms = {
-        "СтрНайти": ["StrFind", "StringFind"],
-        "СтрЗаменить": ["StrReplace", "StringReplace"],
-        "СтрДлина": ["StrLength", "StringLength"],
-        "СтрПолучитьСтроку": ["StrGetLine", "StringGetLine"],
-        "СокрЛ": ["TrimLeft", "StrTrimLeft"],
-        "СокрП": ["TrimRight", "StrTrimRight"],
-        "СокрЛП": ["Trim", "StrTrim"],
-        "РегБ": ["ToUpper", "RegB"],
-        "РегМ": ["ToLower", "RegM"],
-        "ТекущаяДата": ["GetCurrentDate", "CurrentDate"],
-        "НачалоГода": ["StartOfYear", "BeginningOfYear"],
-        "КонецГода": ["EndOfYear"],
-        "НачалоМесяца": ["StartOfMonth", "BeginningOfMonth"],
-        "КонецМесяца": ["EndOfMonth"],
-    }
-    
+    """Verified Russian<->English synonyms only.
+
+    Список построен по ответу платформы 8.3 (файл verified_api.json), а не по
+    памяти: раньше здесь значились StringFind / StrLength / TrimLeft / ToUpper /
+    StartOfYear — платформа на такие имена отвечает «не определена».
+    Если пары нет в реестре — это НЕ «пары нет», а «не проверялось».
+    """
+    api = get_verified_api()
+    registry = api.get("verified_synonyms_ru_en") or {}
+    disproved = set(api.get("synonyms_disproved") or [])
+
     result = {}
-    for ru_name, en_names in synonyms.items():
-        if func_name.lower() in ru_name.lower() or func_name in en_names:
+    for ru_name, en_names in registry.items():
+        if func_name.lower() == ru_name.lower() or func_name in en_names:
             result[ru_name] = en_names
-            
-    return result if result else {"error": f"Синонимы для '{func_name}' не найдены"}
+
+    if result:
+        return {"synonyms": result, "verified_against": api.get("platform_version", "n/a")}
+
+    if func_name in disproved:
+        return {"error": f"'{func_name}' — имени нет в API 8.3 (проверено: «не определена»).",
+                "verified": "absent"}
+
+    return {"error": f"Синонимы для '{func_name}' не проверялись",
+            "verified": "unknown",
+            "message": "отсутствие в реестре ≠ отсутствие синонима; проверь ИТС/оракулом"}
 
 
 def check_api_version(func_name: str, platform_version: str = "8.3.0") -> Dict[str, Any]:
-    """Check if a BSL function is available in the specified platform version."""
+    """Check if a BSL function is available in the specified platform version.
+
+    Честный статус: absent (нет в API 8.3, доказано) отличается от unknown
+    (не проверялось). Версия «since» для unknown не выдумывается.
+    """
+    verdict = check_name_exists(func_name)
+    if verdict["verdict"] == "absent":
+        return {"function": func_name, "available": False,
+                "verified": "absent",
+                "message": "такого имени нет в API 8.3 (платформа: «не определена»); "
+                           "ошибка не в версии платформы"}
+    if verdict["verdict"] == "exists":
+        return {"function": verdict["name"], "available": True,
+                "verified": "exists", "verified_scope": verdict.get("scope"),
+                "kind": verdict.get("kind"),
+                "message": "имя подтверждено исполнением на "
+                           f"{get_verified_api().get('platform_version', '8.3')}; "
+                           "минимальная версия не проверялась — не выдумывается"}
     for name, info in BSL_SYNTAX_HELP.items():
         if name.lower() == func_name.lower():
             introduced = info.get("since", "8.0.0")
@@ -632,6 +754,7 @@ def check_api_version(func_name: str, platform_version: str = "8.3.0") -> Dict[s
                     "function": name,
                     "available": True,
                     "since": introduced,
+                    "verified": verdict["verdict"],
                     "message": f"Функция доступна в версии {platform_version}+",
                 }
             else:
@@ -641,4 +764,6 @@ def check_api_version(func_name: str, platform_version: str = "8.3.0") -> Dict[s
                     "introduced_in": introduced,
                     "message": f"Функция добавлена в версии {introduced}, текущая: {platform_version}",
                 }
-    return {"error": "Функция не найдена в справочнике"}
+    return {"error": "Функция не найдена в справочнике",
+            "verified": verdict["verdict"],
+            "message": "не проверялось исполнением — не считать отсутствующей"}
