@@ -146,78 +146,124 @@ class OneCConfigParser:
             except Exception as e:
                 logger.debug(f"Error parsing subsystem {xml_file}: {e}")
                 
+    def _collect_object_xml_files(self, type_dir: Path) -> List[Path]:
+        """Object XML locations for both dump layouts.
+
+        Current Configurator "hierarchical" dump keeps the object XML flat
+        next to its Ext/ directory: <TypeDir>/<Object>.xml.
+        Older/alternate layout nests it: <TypeDir>/<Object>/<Object>.xml.
+        Ext/ directories never contain object roots and are skipped.
+        """
+        xml_files = sorted(type_dir.glob("*.xml"))
+        for obj_dir in sorted(p for p in type_dir.iterdir() if p.is_dir() and p.name != "Ext"):
+            nested = obj_dir / f"{obj_dir.name}.xml"
+            if not nested.exists():
+                candidates = sorted(obj_dir.glob("*.xml"))
+                nested = candidates[0] if candidates else None
+            if nested is not None and nested.exists() and nested not in xml_files:
+                xml_files.append(nested)
+        return xml_files
+
+    def _md_inner_object(self, root) -> Any:
+        """MDClasses wrapper element inside <MetaDataObject> (Catalog, Document, ...)."""
+        for child in root:
+            return child
+        return None
+
+    def _md_property_elements(self, elem) -> Dict[str, Any]:
+        """Direct <Properties> children of an MDClasses element: local tag -> element."""
+        props: Dict[str, Any] = {}
+        if elem is None:
+            return props
+        for child in elem:
+            if child.tag.split('}')[-1] == "Properties":
+                for prop in child:
+                    props[prop.tag.split('}')[-1]] = prop
+                break
+        return props
+
+    def _md_properties(self, elem) -> Dict[str, str]:
+        """Direct <Properties> children of an MDClasses element: local tag -> text."""
+        return {
+            tag: (node.text or "").strip()
+            for tag, node in self._md_property_elements(elem).items()
+        }
+
+    def _collect_fs_members(self, type_name: str, obj_name: str, group: str) -> List[str]:
+        """Member names from the dump directory layout.
+
+        In the current hierarchical dump <ChildObjects>/<Form> carries no
+        Properties, while the real name is the directory holding the artifact:
+        <TypeDir>/<Object>/<Group>/<Name>/Ext/... So filesystem names are used
+        only when the XML member list produced nothing.
+        """
+        base = Path(self.config_path) / type_name / obj_name / group
+        if not base.is_dir():
+            return []
+        return sorted(d.name for d in base.iterdir() if d.is_dir())
+
     def _parse_type_directory(self, type_dir: Path, type_name: str) -> List[MetaObject]:
         """Parse a metadata type directory (e.g., Documents/, Catalogs/)."""
         objects = []
-        for obj_dir in type_dir.iterdir():
-            if not obj_dir.is_dir():
-                continue
-                
-            xml_file = obj_dir / f"{obj_dir.name}.xml"
-            if not xml_file.exists():
-                xml_file = list(obj_dir.glob("*.xml"))[0] if list(obj_dir.glob("*.xml")) else None
-                
-            if xml_file and xml_file.exists():
-                try:
-                    tree = ET.parse(xml_file)
-                    root = tree.getroot()
-                    
-                    name = root.get("Name", obj_dir.name)
-                    obj_type_map = {
-                        "Catalogs": "Catalog",
-                        "Documents": "Document",
-                        "InformationRegisters": "InformationRegister",
-                        "AccumulationRegisters": "AccumulationRegister",
-                        "ChartsOfAccounts": "ChartOfAccounts",
-                        "ChartsOfCharacteristicTypes": "ChartOfCharacteristicType",
-                        "Constants": "Constant",
-                        "Reports": "Report",
-                        "BusinessProcesses": "BusinessProcess",
-                        "ScheduledJobs": "ScheduledJob",
-                        "CommonModules": "CommonModule",
-                        "CommonForms": "CommonForm",
-                        "CommonCommands": "CommonCommand",
-                        "CommonAttributes": "CommonAttribute",
-                        "DocumentJournal": "DocumentJournal",
-                    }
-                    
-                    obj_data = {
-                        "Name": name,
-                        "_type": obj_type_map.get(type_name, type_name),
-                        "Code": root.get("Code", ""),
-                        "Description": root.findtext("Description", ""),
-                    }
-                    
-                    obj = MetaObject(obj_data)
-                    
-                    # Collect form IDs
-                    forms_elem = root.find("Forms")
-                    if forms_elem is not None:
-                        for form in forms_elem.findall("Form"):
-                            form_name = form.get("Name", "")
-                            obj.form_ids.append(form_name)
-                            
-                    # Collect command IDs  
-                    cmds_elem = root.find("Commands")
-                    if cmds_elem is not None:
-                        for cmd in cmds_elem.findall("Command"):
-                            cmd_name = cmd.get("Name", "")
-                            obj.command_ids.append(cmd_name)
-                            
-                    # Check for subsystems attribute
-                    subsys_elem = root.find("Subsystem")
-                    if subsys_elem is not None and subsys_elem.text:
-                        obj.subsystem = subsys_elem.text
-                        
-                    objects.append(obj)
-                    
-                except Exception as e:
-                    logger.debug(f"Error parsing {obj_dir}: {e}")
-                    
+        obj_type_map = {
+            "Catalogs": "Catalog",
+            "Documents": "Document",
+            "InformationRegisters": "InformationRegister",
+            "AccumulationRegisters": "AccumulationRegister",
+            "ChartsOfAccounts": "ChartOfAccounts",
+            "ChartsOfCharacteristicTypes": "ChartOfCharacteristicType",
+            "Constants": "Constant",
+            "Reports": "Report",
+            "BusinessProcesses": "BusinessProcess",
+            "ScheduledJobs": "ScheduledJob",
+            "CommonModules": "CommonModule",
+            "CommonForms": "CommonForm",
+            "CommonCommands": "CommonCommand",
+            "CommonAttributes": "CommonAttribute",
+            "DocumentJournal": "DocumentJournal",
+        }
+        for xml_file in self._collect_object_xml_files(type_dir):
+            try:
+                tree = ET.parse(xml_file)
+                root = tree.getroot()
+                inner = self._md_inner_object(root)
+                props = self._md_properties(inner)
+                name = props.get("Name") or xml_file.stem
+
+                obj_data = {
+                    "Name": name,
+                    "_type": obj_type_map.get(type_name, type_name),
+                    "Code": props.get("Code", ""),
+                    "Description": props.get("Description", ""),
+                }
+                obj = MetaObject(obj_data)
+
+                for child in inner if inner is not None else []:
+                    if child.tag.split('}')[-1] != "ChildObjects":
+                        continue
+                    for member in child:
+                        kind = member.tag.split('}')[-1]
+                        member_name = self._md_properties(member).get("Name", "")
+                        if not member_name:
+                            continue
+                        if kind == "Form":
+                            obj.form_ids.append(member_name)
+                        elif kind == "Command":
+                            obj.command_ids.append(member_name)
+
+                objects.append(obj)
+
+            except Exception as e:
+                logger.debug(f"Error parsing {xml_file}: {e}")
+
         return objects
         
     def _parse_common_objects(self, dir_path: Path):
-        """Parse common modules, forms, etc."""
+        """Parse common modules, forms, etc.
+
+        Kept for directories not already handled by _parse_directory's type
+        loop; those are skipped to avoid registering the same object twice.
+        """
         common_types = {
             "CommonModules": "CommonModule",
             "CommonForms": "CommonForm",
@@ -226,6 +272,8 @@ class OneCConfigParser:
         }
         
         for type_name, obj_type in common_types.items():
+            if self._metadata.get(type_name):
+                continue
             type_dir = dir_path / type_name
             if not type_dir.exists():
                 continue
@@ -275,94 +323,206 @@ class OneCConfigParser:
             
         return result
         
+    def _find_object(self, object_name: str) -> Optional[MetaObject]:
+        """Resolve by exact name, then qualified "TypeDir.Name", then case-insensitive."""
+        wanted = (object_name or "").strip()
+        if not wanted:
+            return None
+        for obj in self._all_objects:
+            if obj.name == wanted:
+                return obj
+        for type_name, objs in self._metadata.items():
+            if wanted.startswith(type_name + "."):
+                short = wanted[len(type_name) + 1:]
+                for obj in objs:
+                    if obj.name == short:
+                        return obj
+        lowered = wanted.lower()
+        short_l = lowered.rsplit(".", 1)[-1]
+        for obj in self._all_objects:
+            if obj.name.lower() == lowered or obj.name.lower() == short_l:
+                return obj
+        return None
+
+    def _get_object_templates(self, obj: MetaObject) -> List[Dict]:
+        """Layouts/templates declared as ChildObjects/Template members."""
+        xml_path = self._object_xml_path(obj)
+        if xml_path is None:
+            return []
+        try:
+            root = ET.parse(xml_path).getroot()
+        except Exception:
+            return []
+        templates: List[Dict] = []
+        for member in self._md_child_objects(self._md_inner_object(root)):
+            if member.tag.split('}')[-1] != "Template":
+                continue
+            prop_elems = self._md_property_elements(member)
+            node = prop_elems.get("Name")
+            name = (node.text or "").strip() if node is not None else ""
+            if name:
+                templates.append({"name": name})
+        return templates
+
     def get_object_structure(self, object_name: str) -> Optional[Dict[str, Any]]:
         """Get full structure of a metadata object."""
-        for obj in self._all_objects:
-            if obj.name == object_name:
-                result = obj.to_dict()
-                result["attributes"] = self._get_object_attributes(obj)
-                result["tabular_sections"] = self._get_tabular_sections(obj)
-                result["modules"] = self._get_object_modules(obj)
-                return result
-        return None
+        obj = self._find_object(object_name)
+        if obj is None:
+            return None
+        result = obj.to_dict()
+        result["attributes"] = self._get_object_attributes(obj)
+        result["tabular_sections"] = self._get_tabular_sections(obj)
+        result["templates"] = self._get_object_templates(obj)
+        result["modules"] = self._get_object_modules(obj)
+        type_name = self._object_type_name(obj)
+        if type_name:
+            # This dump layout leaves <Form>/<Template> empty in XML; the names
+            # come from the object's own Forms/Templates/Commands directories.
+            if not result.get("forms"):
+                result["forms"] = self._collect_fs_members(type_name, obj.name, "Forms")
+            if not result.get("commands"):
+                result["commands"] = self._collect_fs_members(type_name, obj.name, "Commands")
+            if not result.get("templates"):
+                result["templates"] = [
+                    {"name": n} for n in self._collect_fs_members(type_name, obj.name, "Templates")
+                ]
+        return result
+
         
-    def _get_object_attributes(self, obj: MetaObject) -> List[Dict]:
-        """Try to parse object attributes from XML."""
-        attrs = []
-        type_dir = None
+    def _md_child_objects(self, elem) -> List:
+        """Direct children of an element's <ChildObjects> block."""
+        if elem is None:
+            return []
+        for child in elem:
+            if child.tag.split('}')[-1] == "ChildObjects":
+                return list(child)
+        return []
+
+    def _md_type_info(self, props: Dict[str, Any]) -> Dict[str, Any]:
+        """Value type of a member from its <Properties><Type> block.
+
+        type_uri keeps the raw XDTO type text (for example
+        "cfg:CatalogRef.ItobТерминалы" or "xs:decimal") exactly as dumped;
+        type is the same text without its namespace prefix. No mapping from
+        XDTO names onto platform type names is invented here.
+        """
+        type_elem = props.get("Type")
+        if type_elem is None:
+            return {}
+        info: Dict[str, Any] = {"type_uri": "", "type": "", "type_qualifiers": {}}
+        for child in type_elem:
+            tag = child.tag.split('}')[-1]
+            if tag == "Type":
+                raw = (child.text or "").strip()
+                info["type_uri"] = raw
+                info["type"] = raw.split(":", 1)[-1] if ":" in raw else raw
+            elif tag.endswith("Qualifiers"):
+                for qual in child:
+                    value = (qual.text or "").strip()
+                    if value:
+                        info["type_qualifiers"][qual.tag.split('}')[-1]] = value
+        return info
+
+    def _parse_members(self, container) -> List[Dict]:
+        """Attributes / dimensions / resources / tabular sections of an object.
+
+        MDClasses dumps nest members as ChildObjects/<Member>/Properties.
+        Register dimensions and resources are attributes of their own kind, so
+        the member kind is reported to keep them distinguishable.
+        """
+        members: List[Dict] = []
+        for member in self._md_child_objects(container):
+            kind = member.tag.split('}')[-1]
+            prop_elems = self._md_property_elements(member)
+            name_node = prop_elems.get("Name")
+            name = (name_node.text or "").strip() if name_node is not None else ""
+            if not name:
+                continue
+            if kind == "TabularSection":
+                members.append({
+                    "_type": "tabular_section",
+                    "name": name,
+                    "fields": self._parse_members(member),
+                })
+            elif kind in ("Attribute", "Dimension", "Resource", "Column", "Field"):
+                info = self._md_type_info(prop_elems)
+                description = ""
+                for key in ("Comment", "Description"):
+                    node = prop_elems.get(key)
+                    if node is not None and (node.text or "").strip():
+                        description = node.text.strip()
+                        break
+                entry = {
+                    "name": name,
+                    "type": info.get("type", ""),
+                    "type_uri": info.get("type_uri", ""),
+                    "type_qualifiers": info.get("type_qualifiers", {}),
+                    "description": description,
+                }
+                if kind != "Attribute":
+                    entry["member_kind"] = kind
+                members.append(entry)
+            elif kind in ("EnumValue", "RecordType", "AddressingAttribute"):
+                members.append({"name": name, "member_kind": kind, "type": ""})
+        return members
+
+    def _object_xml_path(self, obj: MetaObject) -> Optional[Path]:
+        """Locate an object's XML for both dump layouts."""
         for type_name, objs in self._metadata.items():
-            if obj in objs:
-                type_dir = type_name
-                break
-                
-        if not type_dir:
-            return attrs
-            
-        type_path = Path(self.config_path) / type_dir / obj.name
-        for xml_file in type_path.glob("*.xml"):
-            try:
-                tree = ET.parse(xml_file)
-                root = tree.getroot()
-                
-                # Look for attributes (PredefinedData, DataFields, etc.)
-                attrs_elem = root.find("Attributes")
-                if attrs_elem is not None:
-                    for attr in attrs_elem.findall("Attribute"):
-                        attrs.append({
-                            "name": attr.get("Name", ""),
-                            "type": attr.get("Type", ""),
-                            "description": attr.findtext("Description", ""),
-                        })
-                        
-                # Look for tabular sections
-                sections_elem = root.find("TabularSections")
-                if sections_elem is not None:
-                    for section in sections_elem.findall("TabularSection"):
-                        section_name = section.get("Name", "")
-                        fields = []
-                        fields_elem = section.find("Fields")
-                        if fields_elem is not None:
-                            for field in fields_elem.findall("Field"):
-                                fields.append({
-                                    "name": field.get("Name", ""),
-                                    "type": field.get("Type", ""),
-                                    "description": field.findtext("Description", ""),
-                                })
-                        attrs.append({
-                            "_type": "tabular_section",
-                            "name": section_name,
-                            "fields": fields,
-                        })
-            except Exception as e:
-                logger.debug(f"Error parsing attributes for {obj.name}: {e}")
-            break
-            
-        return attrs
+            if any(o is obj for o in objs):
+                base = Path(self.config_path) / type_name
+                for candidate in (base / f"{obj.name}.xml",
+                                  base / obj.name / f"{obj.name}.xml"):
+                    if candidate.exists():
+                        return candidate
+                return None
+        return None
+
+    def _object_type_name(self, obj: MetaObject) -> str:
+        """Dump directory name for the object's type (Catalogs, Documents, ...)."""
+        for type_name, objs in self._metadata.items():
+            if any(o is obj for o in objs):
+                return type_name
+        return ""
+
+    def _get_object_attributes(self, obj: MetaObject) -> List[Dict]:
+        """Parse object members (attributes, dimensions, resources, sections)."""
+        xml_path = self._object_xml_path(obj)
+        if xml_path is None:
+            return []
+        try:
+            root = ET.parse(xml_path).getroot()
+        except Exception as e:
+            logger.debug(f"Error parsing attributes for {obj.name}: {e}")
+            return []
+        return self._parse_members(self._md_inner_object(root))
+
         
     def _get_tabular_sections(self, obj: MetaObject) -> List[Dict]:
         """Get tabular sections for an object."""
         return [a for a in self._get_object_attributes(obj) if a.get("_type") == "tabular_section"]
         
     def _get_object_modules(self, obj: MetaObject) -> List[Dict]:
-        """Get module files for an object."""
-        modules = []
-        base_name = obj.name
-        
-        # Search in type directories
+        """Get module files for an object (both dump layouts)."""
+        modules: List[Dict] = []
         for type_name, objs in self._metadata.items():
-            if obj in objs:
-                type_path = Path(self.config_path) / type_name / base_name
-                for bsl_file in type_path.rglob("*.bsl"):
-                    rel_path = bsl_file.relative_to(Path(self.config_path))
-                    content = self._modules.get(str(rel_path), "")
-                    modules.append({
-                        "path": str(rel_path),
-                        "content_length": len(content),
-                        "type": self._guess_module_type(str(rel_path)),
-                    })
-                break
-                
+            if not any(o is obj for o in objs):
+                continue
+            type_path = Path(self.config_path) / type_name
+            # Nested layout: <TypeDir>/<Object>/**.bsl ; flat layout:
+            # <TypeDir>/<Object>/Ext/**.bsl. Both live under the object dir,
+            # so one rglob covers them without scanning sibling objects.
+            for bsl_file in sorted((type_path / obj.name).rglob("*.bsl")):
+                rel_path = bsl_file.relative_to(Path(self.config_path))
+                content = self._modules.get(str(rel_path), "")
+                modules.append({
+                    "path": str(rel_path),
+                    "content_length": len(content),
+                    "type": self._guess_module_type(str(rel_path)),
+                })
+            break
         return modules
+
         
     def _guess_module_type(self, path: str) -> str:
         """Guess the module type from file path."""
@@ -511,11 +671,25 @@ class OneCConfigParser:
         """Find objects not assigned to any subsystem."""
         orphans = []
         for obj in self._all_objects:
-            if not obj.subsystem and obj.type not in ("Subsystem", "CommonModule", 
+            if not obj.subsystem and obj.type not in ("Subsystem", "CommonModule",
                                                         "CommonForm", "CommonCommand",
                                                         "CommonAttribute"):
                 orphans.append(obj.to_dict())
         return orphans
+
+    def subsystem_membership_available(self) -> bool:
+        """Whether this dump records which objects belong to each subsystem.
+
+        Subsystem composition lives in Subsystems/<Name>/Ext/Content.xml or as a
+        subsystem reference on the object. A dump may carry neither: then "not in
+        a subsystem" cannot be told apart from "membership unknown", and reporting
+        every object as orphaned would be wrong.
+        """
+        subsys_dir = Path(self.config_path) / "Subsystems"
+        if subsys_dir.is_dir() and any(subsys_dir.rglob("Content.xml")):
+            return True
+        return any(obj.subsystem for obj in self._all_objects)
+
         
     def get_module_list(self) -> List[Dict]:
         """Get list of all module files with basic info."""

@@ -319,28 +319,76 @@ class OneCDevToolsServer:
         object_type = args.get("object_type", "")
         return parser.get_metadata_tree(object_type)
         
+    def _object_arg(self, args: Dict) -> str:
+        """Object name argument, accepting both documented spellings."""
+        return args.get("object_name") or args.get("name") or ""
+
+    @staticmethod
+    def _require_code_path(args: Dict):
+        """Return (Path, None) or (None, error) for tools that scan code_path.
+
+        Without this an omitted/empty code_path becomes Path(""), which is
+        neither a file nor a directory, so the scan silently covers zero
+        files and the tool returns a successful-looking result with zeros —
+        quality.gate even reports passed: true. An unresolvable path is
+        rejected for the same reason: "nothing found" must not look like
+        "nothing wrong".
+        """
+        code_path = (args.get("code_path") or "").strip()
+        if not code_path:
+            return None, {"error": "code_path required"}
+        path = Path(code_path)
+        if not path.exists():
+            return None, {"error": f"code_path does not exist: {code_path}"}
+        return path, None
+
     def _tool_meta_structure(self, args: Dict) -> Dict:
         """A2: object structure."""
         parser = self.parser
         if not parser:
             return {"error": "Config not loaded."}
-        name = args.get("object_name", "")
+        name = self._object_arg(args)
         if not name:
             return {"error": "object_name required"}
         return parser.get_object_structure(name) or {"error": f"Object not found: {name}"}
-        
+
     def _tool_meta_search(self, args: Dict) -> Dict:
         """A3: search metadata."""
         parser = self.parser
         if not parser:
             return {"error": "Config not loaded."}
         query = args.get("query", "")
-        obj_type = args.get("object_type", "")
+        obj_type = (args.get("object_type") or "").strip() or None
         if not query:
             return {"error": "query required"}
+        if obj_type is not None:
+            obj_type = self._normalize_type_arg(parser, obj_type)
+            if obj_type == "":
+                return {"error": f"Unknown object_type: {args.get('object_type')}. "
+                                 "Pass either the dump directory (Catalogs) or the "
+                                 "object type (Catalog)."}
         results = parser.search_metadata(query, obj_type)
         return {"query": query, "count": len(results), "results": results}
-        
+
+    @staticmethod
+    def _normalize_type_arg(parser, obj_type: str) -> str:
+        """Map object_type onto obj.type, accepting both spellings.
+
+        meta.tree keys on the dump directory name (Catalogs) while
+        search_metadata compares obj.type (Catalog), and every tool is
+        registered with an empty input schema, so a caller cannot discover
+        which spelling applies. An unrecognised value yields "" so the
+        caller gets an error rather than an empty result that looks valid.
+        """
+        wanted = obj_type.strip()
+        type_names = {o.type for objs in parser._metadata.values() for o in objs}
+        if wanted in type_names:
+            return wanted
+        objs = parser._metadata.get(wanted)
+        if objs:
+            return objs[0].type
+        return ""
+
     def _tool_meta_dependencies(self, args: Dict) -> Dict:
         """A4: object dependency graph."""
         parser = self.parser
@@ -363,8 +411,18 @@ class OneCDevToolsServer:
         parser = self.parser
         if not parser:
             return {"error": "Config not loaded."}
+        if not parser.subsystem_membership_available():
+            return {
+                "error": "Subsystem membership is not recorded in this dump "
+                         "(no Subsystems/**/Ext/Content.xml and no subsystem "
+                         "reference on objects); objects cannot be classified "
+                         "as orphaned.",
+                "orphaned_objects": [],
+                "count": 0,
+            }
         orphans = parser.get_orphaned_objects()
         return {"orphaned_objects": orphans, "count": len(orphans)}
+
         
     def _tool_meta_compare(self, args: Dict) -> Dict:
         """A6: compare two metadata versions."""
@@ -391,12 +449,23 @@ class OneCDevToolsServer:
             return {"error": str(e)}
             
     def _tool_meta_find_undefined_refs(self, args: Dict) -> Dict:
-        """A7: find references to non-existent objects."""
+        """A7: find references to non-existent objects.
+
+        The parser method behind this is an unimplemented heuristic (it
+        collects known names, then the per-line loop body is `pass`), so it
+        always returns []. Reporting count: 0 would read as "no broken
+        references" on a codebase that was never analysed.
+        """
         parser = self.parser
         if not parser:
             return {"error": "Config not loaded."}
-        issues = parser.find_undefined_refs()
-        return {"issues": issues, "count": len(issues)}
+        return {
+            "error": "Not implemented: reference analysis never runs in "
+                     "find_undefined_refs (loop body is `pass`). A count of 0 "
+                     "here would mean 'not checked', not 'no broken refs'.",
+            "issues": [],
+            "count": 0,
+        }
         
     def _tool_meta_subsystem_map(self, args: Dict) -> Dict:
         """A8: subsystem to objects map."""
@@ -636,10 +705,11 @@ class OneCDevToolsServer:
         
     def _tool_audit_duplicate_code(self, args: Dict) -> Dict:
         """Б8: find duplicate code blocks."""
-        code_path = args.get("code_path", "")
         min_lines = args.get("min_lines", self.config.audit_min_duplicate_lines)
-        
-        path = Path(code_path)
+
+        path, err = self._require_code_path(args)
+        if err:
+            return err
         code = ""
         if path.is_file():
             code = path.read_text(encoding="utf-8", errors="replace")
@@ -682,9 +752,9 @@ class OneCDevToolsServer:
         
     def _tool_audit_module_complexity(self, args: Dict) -> Dict:
         """Б10: module complexity metrics."""
-        code_path = args.get("code_path", "")
-        
-        path = Path(code_path)
+        path, err = self._require_code_path(args)
+        if err:
+            return err
         results = []
         
         files_to_scan = []
@@ -783,10 +853,11 @@ class OneCDevToolsServer:
         
     def _tool_audit_version_check(self, args: Dict) -> Dict:
         """Б13: platform version compatibility check."""
-        code_path = args.get("code_path", "")
         target_version = args.get("target_version", "8.3.0")
-        
-        path = Path(code_path)
+
+        path, err = self._require_code_path(args)
+        if err:
+            return err
         code = ""
         if path.is_file():
             code = path.read_text(encoding="utf-8", errors="replace")
@@ -1130,19 +1201,27 @@ class OneCDevToolsServer:
         }
         
     def _tool_form_find_orphans(self, args: Dict) -> Dict:
-        """Д2: find forms without objects."""
+        """Д2: find forms without objects.
+
+        The original loop body was `pass`, so this always returned count: 0
+        regardless of the configuration. It is not implemented here either:
+        in the hierarchical dump <ChildObjects><Form> carries no Name, so the
+        object's declared form list is empty and the on-disk Forms/ directory
+        is the only source of form names. With no declared list there is
+        nothing to compare against, and every file on disk would look
+        orphaned — which is why this returns an explicit error instead of 0.
+        """
         parser = self.parser
         if not parser:
             return {"error": "Config not loaded."}
-            
-        # Forms that reference non-existent objects
-        orphan_forms = []
-        for obj in parser._all_objects:
-            for form_id in obj.form_ids:
-                # Check if form exists
-                pass
-                
-        return {"orphan_forms": orphan_forms, "count": len(orphan_forms)}
+        return {
+            "error": "Not implemented: the check never ran (loop body was `pass`), "
+                     "and this dump does not record each object's declared forms "
+                     "(<Form> carries no Name), so orphan forms cannot be "
+                     "distinguished from unknown.",
+            "orphan_forms": [],
+            "count": 0,
+        }
         
     def _tool_form_command_audit(self, args: Dict) -> Dict:
         """Д3: audit form commands."""
@@ -1477,9 +1556,9 @@ class OneCDevToolsServer:
         
     def _tool_quality_metrics(self, args: Dict) -> Dict:
         """Ё3: code quality metrics."""
-        code_path = args.get("code_path", "")
-        
-        path = Path(code_path)
+        path, err = self._require_code_path(args)
+        if err:
+            return err
         files_to_scan = []
         if path.is_dir():
             files_to_scan = list(path.rglob("*.bsl"))
@@ -1542,11 +1621,12 @@ class OneCDevToolsServer:
         
     def _tool_quality_gate(self, args: Dict) -> Dict:
         """Ё5: CI/CD quality gate check."""
-        code_path = args.get("code_path", "")
         max_cyclo = args.get("max_cyclomatic", self.config.quality_max_cyclomatic)
         max_loc = args.get("max_loc", self.config.quality_max_loc)
-        
-        path = Path(code_path)
+
+        path, err = self._require_code_path(args)
+        if err:
+            return err
         results = {"passed": True, "checks": [], "violations": []}
         
         files_to_scan = []
