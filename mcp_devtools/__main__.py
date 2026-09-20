@@ -128,6 +128,10 @@ def main():
     config.server_name = args.server_name
     config.test_base_server = args.test_base or config.test_base_server
     config.headless_1c_path = getattr(args, "onec_path", None) or getattr(args, "1c_path", "") or config.headless_1c_path
+    config.syntax_help_path = getattr(args, "syntax_help_path", "") or config.syntax_help_path
+    if config.syntax_help_path:
+        import os
+        os.environ.setdefault("ONEC_DEVTOOLS_SYNTAX_HELP_PATH", config.syntax_help_path)
     
     if not config.config_path:
         print("Warning: --config-path not set. Metadata-dependent tools will have limited functionality.", 
