@@ -2,6 +2,7 @@
 
 AVAILABLE_TOOLS = [
     "meta.tree", "meta.structure", "meta.search", "meta.dependencies", "meta.find_orphans", "meta.compare", "meta.find_undefined_refs", "meta.subsystem_map", "meta.field_usage", "meta.cross_ref",
+    "graph.calls", "graph.impact", "graph.search", "graph.stats", "std.search", "std.get",
     "audit.e1_e9", "audit.query_antipatterns", "audit.code_antipatterns", "audit.security", "audit.deprecated_api", "audit.pi_data", "audit.rls_roles", "audit.duplicate_code", "audit.dead_code", "audit.module_complexity", "audit.tms_integration", "audit.exchange_safety", "audit.version_check", "audit.rnd_flag", "audit.transaction_boundary",
     "query.validate", "query.optimize", "query.explain", "query.find_sinks", "query.generate", "query.check_fields", "query.check_dimensions", "query.convert_to_async",
     "epf.validate", "epf.roundtrip_check", "epf.generate", "epf.extract_info", "epf.check_modules", "epf.compare", "epf.validate_rules", "epf.list_commands",

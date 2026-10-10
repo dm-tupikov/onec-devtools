@@ -16,10 +16,11 @@ Works with local 1C XML config dumps — no running 1C instance required.
 import asyncio
 import json
 import logging
+import os
 import re
 from contextlib import asynccontextmanager
 from pathlib import Path
-from typing import Any, Dict, List, Optional, AsyncIterator
+from typing import Any, Dict, List, Optional, AsyncIterator, Union
 
 from mcp.server import Server
 from mcp.server.models import InitializationOptions
@@ -28,6 +29,8 @@ from mcp import types
 
 from .config import Config
 from .parser_1c_xml import OneCConfigParser, METADATA_TYPES
+from .graph_index import GraphIndex
+from .std_search import StdCorpus
 from .bsl_analyzer import (
     QueryAnalyzer, BSLAnalyzer, get_bsl_syntax_help,
     find_bsl_synonyms, check_api_version, BSL_SYNTAX_HELP,
@@ -50,6 +53,8 @@ class OneCDevToolsServer:
     def __init__(self, config: Config):
         self.config = config
         self.parser: Optional[OneCConfigParser] = None
+        self._graph: Optional[GraphIndex] = None
+        self._std: Optional[StdCorpus] = None
         self._ensure_config_path()
         
         # Create MCP server
@@ -136,7 +141,23 @@ class OneCDevToolsServer:
             return self._tool_meta_field_usage(args)
         elif name == "meta.cross_ref":
             return self._tool_meta_cross_ref(args)
-            
+
+        # CATEGORY A+: Graph index (4 tools)
+        elif name == "graph.calls":
+            return self._tool_graph_calls(args)
+        elif name == "graph.impact":
+            return self._tool_graph_impact(args)
+        elif name == "graph.search":
+            return self._tool_graph_search(args)
+        elif name == "graph.stats":
+            return self._tool_graph_stats(args)
+
+        # CATEGORY A+: v8std standards corpus (2 tools)
+        elif name == "std.search":
+            return self._tool_std_search(args)
+        elif name == "std.get":
+            return self._tool_std_get(args)
+
         # CATEGORY Б: Audit tools
         elif name == "audit.e1_e9":
             return self._tool_audit_e1_e9(args)
@@ -496,7 +517,114 @@ class OneCDevToolsServer:
         if not result:
             return {"error": f"Object not found: {obj_name}"}
         return result
-        
+
+    # --- CATEGORY A+: Graph index ---
+
+    def _graph_index(self) -> Union[GraphIndex, Dict]:
+        """Lazily build (and cache) the graph index over the loaded parser."""
+        if not self.parser:
+            return {"error": "Config not loaded. Set ONEC_CONFIG_PATH to the XML dump directory."}
+        if self._graph is None:
+            try:
+                self._graph = GraphIndex(self.parser).build()
+            except Exception as e:
+                logger.error(f"Graph build failed: {e}", exc_info=True)
+                return {"error": f"Graph build failed: {e}"}
+        return self._graph
+
+    def _tool_graph_calls(self, args: Dict) -> Dict:
+        """Graph calls: who calls / is called by an object's procedures."""
+        gi = self._graph_index()
+        if isinstance(gi, Dict):
+            return gi
+        name = args.get("object_name", "")
+        if not name:
+            return {"error": "object_name required"}
+        direction = args.get("direction", "both")
+        return gi.calls(
+            name,
+            direction=direction,
+            obj_type=args.get("object_type", ""),
+            limit=int(args.get("limit", 50)),
+        )
+
+    def _tool_graph_impact(self, args: Dict) -> Dict:
+        """Graph impact: what objects are affected if this one changes (reverse BFS)."""
+        gi = self._graph_index()
+        if isinstance(gi, Dict):
+            return gi
+        name = args.get("object_name", "")
+        if not name:
+            return {"error": "object_name required"}
+        return gi.impact(
+            name,
+            obj_type=args.get("object_type", ""),
+            depth=int(args.get("depth", 2)),
+            limit=int(args.get("limit", 100)),
+        )
+
+    def _tool_graph_search(self, args: Dict) -> Dict:
+        """Graph search: find metadata vertices by name/synonym substring."""
+        gi = self._graph_index()
+        if isinstance(gi, Dict):
+            return gi
+        query = args.get("query", "")
+        if not query:
+            return {"error": "query required"}
+        return gi.search(
+            query,
+            obj_type=args.get("object_type", ""),
+            limit=int(args.get("limit", 20)),
+        )
+
+    def _tool_graph_stats(self, args: Dict) -> Dict:
+        """Graph stats: vertex/edge counts and build info."""
+        gi = self._graph_index()
+        if isinstance(gi, Dict):
+            return gi
+        return gi.stats()
+
+    # --- CATEGORY A+: v8std standards corpus ---
+
+    def _std_corpus(self) -> Union[StdCorpus, Dict]:
+        """Lazily load the v8std pages.jsonl corpus."""
+        if self._std is not None:
+            return self._std
+        path = (
+            getattr(self.config, "v8std_corpus_path", None)
+            or os.environ.get("V8STD_CORPUS_PATH")
+            or "C:/GIT/main/v8std/docs/ai/pages.jsonl"
+        )
+        try:
+            self._std = StdCorpus(path).load()
+        except FileNotFoundError:
+            return {"error": f"v8std corpus not found at {path}; set V8STD_CORPUS_PATH"}
+        return self._std
+
+    def _tool_std_search(self, args: Dict) -> Dict:
+        """Search v8std standards by alias/title/full-text word overlap."""
+        corpus = self._std_corpus()
+        if isinstance(corpus, Dict):
+            return corpus
+        query = args.get("query", "")
+        if not query:
+            return {"error": "query required"}
+        hits = corpus.search(query, limit=int(args.get("limit", 10)))
+        return {"query": query, "hits": hits, "stats": corpus.stats()}
+
+    def _tool_std_get(self, args: Dict) -> Dict:
+        """Get a v8std standard body by id (#std396 / std396 / 396)."""
+        corpus = self._std_corpus()
+        if isinstance(corpus, Dict):
+            return corpus
+        std_id = args.get("std_id", "")
+        if not std_id:
+            return {"error": "std_id required (e.g. std396 or 396)"}
+        body = corpus.body(std_id, char_limit=int(args.get("char_limit", 4000)))
+        if not body:
+            return {"error": f"standard not found: {std_id}"}
+        return body
+
     # --- CATEGORY Б: Audit (15) ---
     
     def _tool_audit_e1_e9(self, args: Dict) -> Dict:
