@@ -12,7 +12,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from mcp_devtools.command_catalog import designer_capabilities, ibcmd_capabilities
-from mcp_devtools.ibcmd_runner import discover_ibcmd, run_ibcmd
+from mcp_devtools.ibcmd_runner import discover_ibcmd
 from mcp_devtools.onec_batch import apply_xml_and_build_cf
 
 

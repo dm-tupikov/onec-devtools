@@ -13,7 +13,6 @@ Provides static analysis tools for 1C configuration development:
 Works with local 1C XML config dumps — no running 1C instance required.
 """
 
-import asyncio
 import json
 import logging
 import os
@@ -23,12 +22,10 @@ from pathlib import Path
 from typing import Any, Dict, List, Optional, AsyncIterator, Union
 
 from mcp.server import Server
-from mcp.server.models import InitializationOptions
-from mcp.server.lowlevel import NotificationOptions
 from mcp import types
 
 from .config import Config
-from .parser_1c_xml import OneCConfigParser, METADATA_TYPES
+from .parser_1c_xml import OneCConfigParser
 from .graph_index import GraphIndex
 from .std_search import StdCorpus
 from .bsl_analyzer import (
@@ -651,7 +648,6 @@ class OneCDevToolsServer:
                 break
             try:
                 code = bsl_file.read_text(encoding="utf-8", errors="replace")
-                filename = bsl_file.name
                 
                 # Queue leak: Continue in loop without unregistering
                 if "Продолжить" in code and ("Цикл" in code or "Выбрать" in code):
@@ -684,7 +680,7 @@ class OneCDevToolsServer:
                         
             except Exception as e:
                 issues["_errors"] = issues.get("_errors", [])
-                issues["_errors"].append(str(bsl_file))
+                issues["_errors"].append(f"{bsl_file}: {e}")
                 
         total = sum(len(v) for k, v in issues.items() if k != "_errors")
         return {
@@ -899,7 +895,7 @@ class OneCDevToolsServer:
             try:
                 code = bsl_file.read_text(encoding="utf-8", errors="replace")
                 metrics = BSLAnalyzer.calculate_complexity(code)
-                
+
                 issues = []
                 if metrics["total_lines"] > max_loc:
                     issues.append(f"Too many lines: {metrics['total_lines']} > {max_loc}")
@@ -1133,9 +1129,9 @@ class OneCDevToolsServer:
         query = ""
         
         if "остаток" in description.lower() or "остатки" in description.lower():
-            query = f"ВЫБРАТЬ * ИЗ Документ.уатПутевойЛист WHERE Дата >= ПОДСТАНОВКА('НачалоДня(ТекущаяДата()) - 1')"
+            query = "ВЫБРАТЬ * ИЗ Документ.уатПутевойЛист WHERE Дата >= ПОДСТАНОВКА('НачалоДня(ТекущаяДата()) - 1')"
         elif "счет" in description.lower() or "количество" in description.lower():
-            query = f"ВЫБРАТЬ РАЗЛИЧНЫЕ Счет ИЗ Справочник.уатТС"
+            query = "ВЫБРАТЬ РАЗЛИЧНЫЕ Счет ИЗ Справочник.уатТС"
         elif "список" in description.lower() or "перечень" in description.lower():
             query = f"ВЫБРАТЬ ПЕРВЫЕ 100 * ИЗ Справочник.{object_name or 'Номенклатура'}"
         else:
@@ -1160,7 +1156,6 @@ class OneCDevToolsServer:
             
         # Extract field references from query
         query_upper = query.upper()
-        issues = []
         
         # Simple check: look for field references
         for obj in parser._all_objects:
@@ -1436,7 +1431,7 @@ class OneCDevToolsServer:
             code = path.read_text(encoding="utf-8", errors="replace")
         elif path.is_dir():
             for mxl_file in path.rglob("*.mxl"):
-                code += bsl_file.read_text(encoding="utf-8", errors="replace")
+                code += mxl_file.read_text(encoding="utf-8", errors="replace")
                 
         # Look for MXL references to non-existent objects
         return {"mxl_issues": [], "note": "MXL analysis requires layout file parsing"}
@@ -1623,7 +1618,7 @@ class OneCDevToolsServer:
 Функция ТестСоздание{object_name}(Отказ)
     
     Попытка
-        Объект = Документы.{objectName}.СоздатьДокумент();
+        Объект = Документы.{object_name}.СоздатьДокумент();
         Объект.Дата = ТекущаяДата();
         Объект.Записать(РежимЗаписиДокумента.Проведение);
         
@@ -1634,13 +1629,13 @@ class OneCDevToolsServer:
         Возврат Ложь;
     КонецПопытки;
     
-КонецФункции // ТестСоздание{objectName}
+КонецФункции // ТестСоздание{object_name}
 """
         elif test_type == "integration":
             template = f"""// Integration test for {object_name}
 // Framework: Vanessa-Automation
 
-Функция ИнтеграционныйТест{objectName}()
+Функция ИнтеграционныйТест{object_name}()
     
     // TODO: Add integration test logic
     // 1. Prepare test data
@@ -1650,7 +1645,7 @@ class OneCDevToolsServer:
     
     Возврат Истина;
     
-КонецФункции // ИнтеграционныйТест{objectName}
+КонецФункции // ИнтеграционныйТест{object_name}
 """
         else:
             template = f"// Test template for {object_name} ({test_type})"
@@ -1695,7 +1690,6 @@ class OneCDevToolsServer:
             
         total_lines = 0
         total_functions = 0
-        total_issues = 0
         max_cyclo = 0
         
         for bsl_file in files_to_scan:

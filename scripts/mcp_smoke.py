@@ -10,7 +10,6 @@ Exit code 0 = smoke passed.
 
 import asyncio
 import json
-import subprocess
 import sys
 from pathlib import Path
 

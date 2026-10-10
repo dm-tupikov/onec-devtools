@@ -4,11 +4,10 @@ Parses the standard 1C configuration export format (Config.xml structure)
 to provide programmatic access to metadata objects, forms, modules, etc.
 """
 
-import json
 import logging
 import xml.etree.ElementTree as ET
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -595,7 +594,6 @@ class OneCConfigParser:
         
     def find_undefined_refs(self) -> List[Dict]:
         """Find references to non-existent objects in module code."""
-        known_names = {obj.name.lower() for obj in self._all_objects}
         known_attrs = set()
         
         # Collect all attribute names

@@ -105,7 +105,7 @@ AVAILABLE_TOOLS = [
 
 
 # Keep CLI listing in sync with MCP discovery.
-from .tool_names import AVAILABLE_TOOLS as _MCP_AVAILABLE_TOOLS
+from .tool_names import AVAILABLE_TOOLS as _MCP_AVAILABLE_TOOLS  # noqa: E402 (листинг CLI рядом с комментарием-контрактом)
 AVAILABLE_TOOLS = _MCP_AVAILABLE_TOOLS
 
 def main():

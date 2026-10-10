@@ -8,7 +8,7 @@ import re
 import os
 import logging
 from pathlib import Path
-from typing import Any, Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger(__name__)
 
@@ -99,7 +99,6 @@ class QueryAnalyzer:
     def detect_anti_patterns(cls, query_text: str) -> List[Dict[str, Any]]:
         """Detect anti-patterns in a 1C query."""
         issues = []
-        normalized = re.sub(r"\s+", " ", query_text).upper()
         
         for pattern_id, info in cls.ANTI_PATTERNS.items():
             if re.search(info["pattern"], query_text, re.IGNORECASE | re.MULTILINE):
@@ -392,7 +391,6 @@ class BSLAnalyzer:
         
         for i in range(len(normalized_lines) - block_size + 1):
             block = normalized_lines[i:i + block_size]
-            block_hash = hash(tuple(block))
             
             for j in range(i + block_size, len(normalized_lines) - block_size + 1):
                 other_block = normalized_lines[j:j + block_size]
@@ -430,13 +428,14 @@ class BSLAnalyzer:
                     
         # Detect synchronous calls in loops
         in_loop = False
-        loop_start = 0
+        sync_in_loop = []
         for i, line in enumerate(lines):
-            if "Цикл" in line:
+            if "Цикл" in line and "КонецЦикла" not in line:
                 in_loop = True
-                loop_start = i
             elif "КонецЦикла" in line:
                 in_loop = False
+            elif in_loop and any(kw in line for kw in ("Запрос", "Справочник", "Документ")):
+                sync_in_loop.append({"line": i + 1, "text": line.strip()[:120]})
                 
         # Very large functions
         functions = []
@@ -506,7 +505,6 @@ class BSLAnalyzer:
         
         in_query = False
         query_start = 0
-        query_lines = []
         query_name = ""
         
         for i, line in enumerate(lines):
@@ -514,7 +512,6 @@ class BSLAnalyzer:
             if "Новый Запрос" in line or "Запрос" in line and "Новый" in line:
                 in_query = True
                 query_start = i + 1
-                query_lines = []
                 # Try to get query name from variable assignment
                 match = re.match(r"\s*(\w+)\s*=\s*.*Новый\s+Запрос", line)
                 if match:
@@ -589,8 +586,7 @@ BSL_ABSENT_NAMES = [
     "СоздатьОбъект",                           # API 7.7, в 8.x отсутствует
 ]
 
-import json as _json
-
+import json as _json  # noqa: E402 (после таблицы имён, к которой относится)
 def _load_verified_api() -> Dict[str, Any]:
     """Верифицированный реестр имён платформы (получен ИСПОЛНЕНИЕМ на живой ИБ).
 
