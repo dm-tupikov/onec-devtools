@@ -232,7 +232,7 @@ class GraphIndex:
                 pname = m.group(1)
                 fq = f"{owner}#{pname}" if owner else f"{path}#{pname}"
                 current_proc = fq
-                info = self.procedures.setdefault(
+                self.procedures.setdefault(
                     fq,
                     {"name": pname, "module": path, "owner": owner, "line": lineno, "calls": 0},
                 )

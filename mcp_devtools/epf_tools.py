@@ -1,12 +1,9 @@
 """EPF (External Data Processor) tools for 1C configuration."""
 
-import base64
 import logging
 import os
-import subprocess
-import tempfile
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict
 
 logger = logging.getLogger(__name__)
 
