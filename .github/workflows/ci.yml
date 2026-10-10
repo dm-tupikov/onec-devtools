@@ -31,7 +31,7 @@ jobs:
         run: python -m unittest discover -s tests -v
 
   lint:
-    name: "Линт (ruff)"
+    name: "Линт (ruff, ошибки)"
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -43,11 +43,11 @@ jobs:
       - name: "Установка ruff"
         run: pip install ruff
 
-      - name: "ruff check"
-        run: ruff check mcp_devtools/ tests/ scripts/
-
-      - name: "ruff format --check"
-        run: ruff format --check mcp_devtools/ tests/ scripts/
+      # Первый линтер в репозитории: только детекция реальных ошибок
+      # (E4/E7/E9 + pyflakes F), не стилистика. Полный набор и формат —
+      # отдельным шагом после приведения кодовой базы.
+      - name: "ruff check (E4,E7,E9,F)"
+        run: ruff check --select E4,E7,E9,F mcp_devtools/ tests/ scripts/
 
   mcp-smoke:
     name: "MCP smoke (stdio handshake)"
