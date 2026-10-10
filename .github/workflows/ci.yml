@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  tests:
+    name: "Unit-тесты (${{ matrix.python-version }})"
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.11", "3.12", "3.13"]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+          cache: pip
+
+      - name: "Установка зависимостей"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: "Юнит-тесты (unittest discover)"
+        run: python -m unittest discover -s tests -v
+
+  lint:
+    name: "Линт (ruff)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: "Установка ruff"
+        run: pip install ruff
+
+      - name: "ruff check"
+        run: ruff check mcp_devtools/ tests/ scripts/
+
+      - name: "ruff format --check"
+        run: ruff format --check mcp_devtools/ tests/ scripts/
+
+  mcp-smoke:
+    name: "MCP smoke (stdio handshake)"
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: "Установка зависимостей"
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: "Smoke: старт сервера и tools/list"
+        run: python scripts/mcp_smoke.py
